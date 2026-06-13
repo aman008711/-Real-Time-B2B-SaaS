@@ -64,11 +64,13 @@ export default function Dashboard() {
         {/* Workspace Brand Selector */}
         <div className="h-16 px-4 border-b border-white/[0.04] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-md shadow-violet-500/20">
-              S
-            </div>
+            <img 
+              src="/Slack notionlogo.png" 
+              alt="SlackNotion Logo" 
+              className="w-8 h-8 object-contain" 
+            />
             <div>
-              <h2 className="text-sm font-semibold tracking-wide text-white leading-tight">SaaS-Workspace</h2>
+              <h2 className="text-sm font-semibold tracking-wide text-white leading-tight">SlackNotion</h2>
               <span className="text-[10px] text-violet-400 font-semibold uppercase tracking-wider">Plan: Enterprise</span>
             </div>
           </div>

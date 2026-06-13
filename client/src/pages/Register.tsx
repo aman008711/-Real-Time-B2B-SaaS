@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
-import { UserPlus, Mail, Lock, User as UserIcon, Shield, ArrowRight, Loader2 } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, Shield, ArrowRight, Loader2 } from 'lucide-react';
 
 export default function Register() {
   const [email, setEmail] = useState('');
@@ -28,13 +28,15 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#0b0f19] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.15),rgba(255,255,255,0))] px-4 py-12">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen w-full flex flex-col items-center justify-start py-8 md:justify-center md:py-12 bg-[#0b0f19] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.15),rgba(255,255,255,0))] px-4">
+      <div className="w-full max-w-lg">
         {/* Header */}
-        <div className="flex flex-col items-center mb-8 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/20 mb-3 animate-pulse">
-            <UserPlus className="w-6 h-6 text-white" />
-          </div>
+        <div className="flex flex-col items-center mb-6 text-center">
+          <img 
+            src="/Slack notionlogo.png" 
+            alt="SlackNotion Logo" 
+            className="w-16 h-16 object-contain mb-3" 
+          />
           <h1 className="text-3xl font-extrabold tracking-tight text-white">
             Create account
           </h1>
