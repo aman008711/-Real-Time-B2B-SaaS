@@ -14,6 +14,10 @@ export default function Register() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
     setError(null);
     setLoading(true);
 
@@ -32,10 +36,10 @@ export default function Register() {
       <div className="w-full max-w-lg">
         {/* Header */}
         <div className="flex flex-col items-center mb-6 text-center">
-          <img 
-            src="/Slack notionlogo.png" 
-            alt="SlackNotion Logo" 
-            className="w-16 h-16 object-contain mb-3" 
+          <img
+            src="/logo.png"
+            alt="SlackNotion Logo"
+            className="w-16 h-16 object-contain mb-3"
           />
           <h1 className="text-3xl font-extrabold tracking-tight text-white">
             Create account
@@ -123,11 +127,10 @@ export default function Register() {
                 <button
                   type="button"
                   onClick={() => setRole('member')}
-                  className={`flex items-center justify-center gap-2 py-3 px-4 border rounded-xl font-medium transition-all duration-200 ${
-                    role === 'member'
-                      ? 'bg-violet-600/10 border-violet-500 text-violet-400 shadow-md shadow-violet-500/5'
-                      : 'bg-white/[0.01] border-white/[0.08] text-gray-400 hover:bg-white/[0.03]'
-                  }`}
+                  className={`flex items-center justify-center gap-2 py-3 px-4 border rounded-xl font-medium transition-all duration-200 ${role === 'member'
+                    ? 'bg-violet-600/10 border-violet-500 text-violet-400 shadow-md shadow-violet-500/5'
+                    : 'bg-white/[0.01] border-white/[0.08] text-gray-400 hover:bg-white/[0.03]'
+                    }`}
                 >
                   <UserIcon className="w-4 h-4" />
                   <span>Member</span>
@@ -135,11 +138,10 @@ export default function Register() {
                 <button
                   type="button"
                   onClick={() => setRole('admin')}
-                  className={`flex items-center justify-center gap-2 py-3 px-4 border rounded-xl font-medium transition-all duration-200 ${
-                    role === 'admin'
-                      ? 'bg-violet-600/10 border-violet-500 text-violet-400 shadow-md shadow-violet-500/5'
-                      : 'bg-white/[0.01] border-white/[0.08] text-gray-400 hover:bg-white/[0.03]'
-                  }`}
+                  className={`flex items-center justify-center gap-2 py-3 px-4 border rounded-xl font-medium transition-all duration-200 ${role === 'admin'
+                    ? 'bg-violet-600/10 border-violet-500 text-violet-400 shadow-md shadow-violet-500/5'
+                    : 'bg-white/[0.01] border-white/[0.08] text-gray-400 hover:bg-white/[0.03]'
+                    }`}
                 >
                   <Shield className="w-4 h-4" />
                   <span>Admin</span>

@@ -30,17 +30,16 @@ export default function Login() {
       <div className="w-full max-w-lg">
         {/* Brand Logo/Header */}
         <div className="flex flex-col items-center mb-6 text-center">
-          <img 
-            src="/Slack notionlogo.png" 
-            alt="SlackNotion Logo" 
-            className="w-16 h-16 object-contain mb-3" 
+          <img
+            src="/logo.png"
+            alt="SlackNotion Logo"
+            className="w-16 h-16 object-contain mb-3"
           />
           <h1 className="text-3xl font-extrabold tracking-tight text-white">
             Welcome back
           </h1>
           <p className="text-sm text-gray-400 mt-1">
-            Access your B2B SaaS Collaboration Workspace
-          </p>
+            B2B saaS collaboration workspace        </p>
         </div>
 
         {/* Form Card */}

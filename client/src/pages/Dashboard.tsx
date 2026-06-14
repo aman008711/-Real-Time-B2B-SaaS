@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type User } from '../services/api';
-import { 
-  LogOut, 
-  Hash, 
-  MessageSquare, 
-  FileText, 
-  Settings, 
-  Users, 
-  Plus, 
+import {
+  LogOut,
+  Hash,
+  MessageSquare,
+  FileText,
+  Settings,
+  Users,
+  Plus,
   Sparkles,
   Search,
   Bell,
@@ -43,6 +43,19 @@ export default function Dashboard() {
     navigate('/login');
   };
 
+  // if (loading) {
+  //   return (
+  //     <div className="min-h-screen bg-[#0b0f19] flex items-center justify-center">
+  //       <div className="relative flex flex-col items-center">
+  //         <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 animate-spin flex items-center justify-center shadow-lg shadow-violet-500/25">
+  //           <Layers className="w-6 h-6 text-white" />
+  //         </div>
+  //         <p className="text-gray-400 text-sm mt-4 font-medium animate-pulse">Initializing workspace...</p>
+  //       </div>
+  //     </div>
+  //   );
+  // }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0b0f19] flex items-center justify-center">
@@ -50,7 +63,9 @@ export default function Dashboard() {
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 animate-spin flex items-center justify-center shadow-lg shadow-violet-500/25">
             <Layers className="w-6 h-6 text-white" />
           </div>
-          <p className="text-gray-400 text-sm mt-4 font-medium animate-pulse">Initializing workspace...</p>
+          <p className="text-gray-400 text-sm mt-4 font-medium animate-pulse">
+            Initializing workspace...
+          </p>
         </div>
       </div>
     );
@@ -58,16 +73,16 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#0b0f19] text-gray-100 flex overflow-hidden font-sans">
-      
+
       {/* 1. Left Sidebar - Workspaces & Channels */}
       <aside className="w-64 bg-[#0d1321]/90 border-r border-white/[0.04] flex flex-col flex-shrink-0 backdrop-blur-xl">
         {/* Workspace Brand Selector */}
         <div className="h-16 px-4 border-b border-white/[0.04] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <img 
-              src="/Slack notionlogo.png" 
-              alt="SlackNotion Logo" 
-              className="w-8 h-8 object-contain" 
+            <img
+              src="/logo.png"
+              alt="SlackNotion Logo"
+              className="w-8 h-8 object-contain"
             />
             <div>
               <h2 className="text-sm font-semibold tracking-wide text-white leading-tight">SlackNotion</h2>
@@ -162,16 +177,15 @@ export default function Dashboard() {
             </div>
             <div className="min-w-0">
               <p className="text-xs font-semibold text-white truncate leading-none">{user?.name}</p>
-              <span className={`inline-block text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md mt-1 ${
-                user?.role === 'admin' 
-                  ? 'bg-red-500/10 text-red-400 border border-red-500/20' 
-                  : 'bg-violet-500/10 text-violet-400 border border-violet-500/20'
-              }`}>
+              <span className={`inline-block text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md mt-1 ${user?.role === 'admin'
+                ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                : 'bg-violet-500/10 text-violet-400 border border-violet-500/20'
+                }`}>
                 {user?.role}
               </span>
             </div>
           </div>
-          <button 
+          <button
             onClick={handleLogout}
             title="Log Out"
             className="p-1.5 rounded-lg hover:bg-white/[0.05] text-gray-400 hover:text-red-400 transition-colors"
@@ -183,7 +197,7 @@ export default function Dashboard() {
 
       {/* 2. Main Work Panel */}
       <main className="flex-1 flex flex-col min-w-0">
-        
+
         {/* Header bar */}
         <header className="h-16 border-b border-white/[0.04] px-6 flex items-center justify-between flex-shrink-0 bg-[#0b0f19]/80 backdrop-blur">
           <div className="flex items-center gap-2">
@@ -239,7 +253,7 @@ export default function Dashboard() {
                 <Terminal className="w-4.5 h-4.5 text-violet-400" />
                 <span>Week 1 Implementation Spec</span>
               </h4>
-              
+
               <ul className="space-y-3.5">
                 <li className="flex items-start gap-3 text-sm">
                   <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />

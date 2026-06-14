@@ -10,8 +10,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_987654321_tok
 // Input Validation Schemas
 const registerSchema = z.object({
   email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters long'),
-  name: z.string().min(2, 'Name must be at least 2 characters long'),
+  password: z.string().min(8, 'Password must be at least 8 characters long'),
+  name: z.string().min(4, 'Name must be at least 4 characters long'),
   role: z.enum(['admin', 'member']).optional(),
 });
 
