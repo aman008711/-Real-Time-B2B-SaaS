@@ -2,10 +2,9 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
+import { env } from '../config/env';
 import { userRepository } from '../models/user.model';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_987654321_token_signing_key_real_time_b2b_saas';
 
 // Input Validation Schemas
 const registerSchema = z.object({
@@ -51,7 +50,7 @@ export async function register(req: Request, res: Response): Promise<void> {
     // Generate JWT
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
+      env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
@@ -94,7 +93,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     // Generate JWT
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
+      env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 

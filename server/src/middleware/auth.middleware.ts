@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_987654321_token_signing_key_real_time_b2b_saas';
+import { env } from '../config/env';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -24,7 +23,7 @@ export function authenticateToken(
     return;
   }
 
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+  jwt.verify(token, env.JWT_SECRET, (err, decoded) => {
     if (err) {
       res.status(403).json({ error: 'Invalid or expired token' });
       return;

@@ -25,6 +25,19 @@ export function removeToken(): void {
   localStorage.removeItem('saas_token');
 }
 
+export function isTokenExpired(token: string | null): boolean {
+  if (!token) return true;
+  try {
+    const payloadBase64 = token.split('.')[1];
+    if (!payloadBase64) return true;
+    const decodedPayload = JSON.parse(atob(payloadBase64));
+    if (!decodedPayload || typeof decodedPayload.exp !== 'number') return true;
+    return decodedPayload.exp * 1000 < Date.now();
+  } catch {
+    return true;
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   

@@ -26,42 +26,61 @@ export interface IUserRepository {
 }
 
 class InMemoryUserRepository implements IUserRepository {
-  private loadUsers(): Map<string, User> {
-    if (!fs.existsSync(FILE_PATH)) {
+  private writeQueue: Promise<void> = Promise.resolve();
+
+  private async loadUsers(): Promise<Map<string, User>> {
+    try {
+      if (!fs.existsSync(FILE_PATH)) {
+        return new Map();
+      }
+
+      const fileData = await fs.promises.readFile(FILE_PATH, "utf-8");
+
+      if (!fileData.trim()) {
+        return new Map();
+      }
+
+      const parsed = JSON.parse(fileData);
+
+      return new Map(
+        Object.entries(parsed).map(([id, user]: [string, any]) => [
+          id,
+          {
+            ...user,
+            createdAt: new Date(user.createdAt),
+          },
+        ])
+      );
+    } catch (error) {
+      console.error("[UserRepository] Error loading users:", error);
       return new Map();
     }
-
-    const fileData = fs.readFileSync(FILE_PATH, "utf-8");
-
-    if (!fileData) {
-      return new Map();
-    }
-
-    const parsed = JSON.parse(fileData);
-
-    return new Map(
-      Object.entries(parsed).map(([id, user]: [string, any]) => [
-        id,
-        {
-          ...user,
-          createdAt: new Date(user.createdAt),
-        },
-      ])
-    );
   }
 
-  private saveUsers(users: Map<string, User>): void {
-    const obj = Object.fromEntries(users);
-
-    fs.writeFileSync(
-      FILE_PATH,
-      JSON.stringify(obj, null, 2),
-      "utf-8"
-    );
+  private async saveUsers(users: Map<string, User>): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.writeQueue = this.writeQueue
+        .then(async () => {
+          try {
+            const obj = Object.fromEntries(users);
+            await fs.promises.writeFile(
+              FILE_PATH,
+              JSON.stringify(obj, null, 2),
+              "utf-8"
+            );
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        })
+        .catch((err) => {
+          reject(err);
+        });
+    });
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    const users = this.loadUsers();
+    const users = await this.loadUsers();
 
     const emailLower = email.toLowerCase().trim();
 
@@ -75,13 +94,13 @@ class InMemoryUserRepository implements IUserRepository {
   }
 
   async findById(id: string): Promise<User | null> {
-    const users = this.loadUsers();
+    const users = await this.loadUsers();
 
     return users.get(id) || null;
   }
 
   async create(input: CreateUserInput): Promise<User> {
-    const users = this.loadUsers();
+    const users = await this.loadUsers();
 
     const id = Math.random().toString(36).substring(2, 15);
 
@@ -96,7 +115,7 @@ class InMemoryUserRepository implements IUserRepository {
 
     users.set(id, newUser);
 
-    this.saveUsers(users);
+    await this.saveUsers(users);
 
     return newUser;
   }

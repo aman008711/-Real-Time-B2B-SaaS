@@ -2,12 +2,15 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
-import { getToken } from './services/api';
+import { getToken, isTokenExpired, removeToken } from './services/api';
 
 // Route protection wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = getToken();
-  if (!token) {
+  if (!token || isTokenExpired(token)) {
+    if (token) {
+      removeToken();
+    }
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
