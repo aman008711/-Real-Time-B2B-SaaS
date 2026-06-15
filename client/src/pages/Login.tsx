@@ -12,11 +12,25 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const trimmedEmail = email.trim();
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setError("Please enter a valid email address");
+      return;
+    }
+
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+
     setError(null);
     setLoading(true);
 
     try {
-      await api.login(email, password);
+      await api.login(trimmedEmail, password);
       navigate('/');
     } catch (err: any) {
       setError(err.message || 'Failed to sign in. Please check your credentials.');
@@ -26,7 +40,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-start py-8 md:justify-center md:py-12 bg-[#0b0f19] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.15),rgba(255,255,255,0))] px-4">
+    <div className="min-h-screen w-full flex flex-col items-center justify-start py-8 md:justify-center md:py-12 bg-[#f8fafc] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.08),rgba(255,255,255,0))] px-4">
       <div className="w-full max-w-lg">
         {/* Brand Logo/Header */}
         <div className="flex flex-col items-center mb-6 text-center">
@@ -35,32 +49,33 @@ export default function Login() {
             alt="SlackNotion Logo"
             className="w-16 h-16 object-contain mb-3"
           />
-          <h1 className="text-3xl font-extrabold tracking-tight text-white">
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
             Welcome back
           </h1>
-          <p className="text-sm text-gray-400 mt-1">
-            B2B saaS collaboration workspace        </p>
+          <p className="text-sm text-slate-500 mt-1">
+            B2B saaS collaboration workspace
+          </p>
         </div>
 
         {/* Form Card */}
-        <div className="backdrop-blur-md bg-white/[0.02] border border-white/[0.05] rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+        <div className="backdrop-blur-md bg-white/70 border border-slate-200/80 rounded-3xl p-8 shadow-xl relative overflow-hidden">
           {/* Decorative ambient lights */}
-          <div className="absolute -top-24 -left-24 w-48 h-48 bg-violet-600/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -top-24 -left-24 w-48 h-48 bg-violet-500/5 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
 
           {error && (
-            <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center">
+            <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 text-sm text-center font-medium">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
             <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
                 Email Address
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
                   <Mail className="w-5 h-5" />
                 </span>
                 <input
@@ -69,19 +84,19 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@company.com"
-                  className="w-full pl-10 pr-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500 transition-all duration-200"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-500 transition-all duration-200"
                 />
               </div>
             </div>
 
             <div>
               <div className="flex justify-between items-center mb-2">
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Password
                 </label>
               </div>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
                   <Lock className="w-5 h-5" />
                 </span>
                 <input
@@ -90,7 +105,7 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-10 pr-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500 transition-all duration-200"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-500 transition-all duration-200"
                 />
               </div>
             </div>
@@ -113,11 +128,11 @@ export default function Login() {
         </div>
 
         {/* Redirect Option */}
-        <p className="text-center text-sm text-gray-400 mt-6">
+        <p className="text-center text-sm text-slate-500 mt-6 font-medium">
           Don't have an account?{' '}
           <Link
             to="/register"
-            className="text-violet-400 hover:text-violet-300 font-semibold transition-colors duration-200"
+            className="text-violet-600 hover:text-violet-500 font-semibold transition-colors duration-200"
           >
             Create an account
           </Link>

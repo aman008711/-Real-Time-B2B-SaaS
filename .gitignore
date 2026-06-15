@@ -5,3 +5,7 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# Local databases
+users.json
+server/users.json
