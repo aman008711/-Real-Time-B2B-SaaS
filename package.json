@@ -11,5 +11,8 @@
     "server:build": "npm run build -w server",
     "client:dev": "npm run dev -w client",
     "client:build": "npm run build -w client"
+  },
+  "dependencies": {
+    "react-router-dom": "^7.18.0"
   }
 }
