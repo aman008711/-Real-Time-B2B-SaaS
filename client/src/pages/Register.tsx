@@ -127,11 +127,10 @@ export default function Register() {
                 <button
                   type="button"
                   onClick={() => setRole('member')}
-                  className={`flex items-center justify-center gap-2 py-3 px-4 border rounded-xl font-medium transition-all duration-200 ${
-                    role === 'member'
+                  className={`flex items-center justify-center gap-2 py-3 px-4 border rounded-xl font-medium transition-all duration-200 ${role === 'member'
                       ? 'bg-violet-600/10 border-violet-500 text-violet-600 shadow-md shadow-violet-500/5'
                       : 'bg-slate-50/50 border border-slate-200 text-slate-500 hover:bg-slate-100/50'
-                  }`}
+                    }`}
                 >
                   <UserIcon className="w-4 h-4" />
                   <span>Member</span>
@@ -139,11 +138,10 @@ export default function Register() {
                 <button
                   type="button"
                   onClick={() => setRole('admin')}
-                  className={`flex items-center justify-center gap-2 py-3 px-4 border rounded-xl font-medium transition-all duration-200 ${
-                    role === 'admin'
+                  className={`flex items-center justify-center gap-2 py-3 px-4 border rounded-xl font-medium transition-all duration-200 ${role === 'admin'
                       ? 'bg-violet-600/10 border-violet-500 text-violet-600 shadow-md shadow-violet-500/5'
                       : 'bg-slate-50/50 border border-slate-200 text-slate-500 hover:bg-slate-100/50'
-                  }`}
+                    }`}
                 >
                   <Shield className="w-4 h-4" />
                   <span>Admin</span>

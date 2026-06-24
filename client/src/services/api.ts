@@ -13,6 +13,29 @@ export interface AuthResponse {
   token: string;
 }
 
+export interface Workspace {
+  id: string;
+  name: string;
+  description?: string;
+  ownerId: string;
+  members: string[];
+  createdAt: string;
+}
+
+export interface Message {
+  id: string;
+  workspaceId: string;
+  channel: string;
+  senderId: {
+    id: string;
+    name: string;
+    role: 'admin' | 'member';
+    email: string;
+  };
+  text: string;
+  createdAt: string;
+}
+
 export function getToken(): string | null {
   return localStorage.getItem('saas_token');
 }
@@ -91,5 +114,27 @@ export const api = {
 
   logout(): void {
     removeToken();
+  },
+
+  async getWorkspaces(): Promise<Workspace[]> {
+    return request<Workspace[]>('/workspaces');
+  },
+
+  async createWorkspace(name: string, description?: string): Promise<Workspace> {
+    return request<Workspace>('/workspaces', {
+      method: 'POST',
+      body: JSON.stringify({ name, description }),
+    });
+  },
+
+  async getMessages(workspaceId: string, channel: string): Promise<Message[]> {
+    return request<Message[]>(`/workspaces/${workspaceId}/messages?channel=${encodeURIComponent(channel)}`);
+  },
+
+  async sendMessage(workspaceId: string, channel: string, text: string): Promise<Message> {
+    return request<Message>(`/workspaces/${workspaceId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ channel, text }),
+    });
   }
 };

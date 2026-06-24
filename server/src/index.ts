@@ -2,6 +2,8 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { env } from './config/env';
 import router from './routes';
+import { connectDatabase } from './config/db';
+import { cleanApiResponse } from './middleware/clean-response.middleware';
 
 const app = express();
 const PORT = env.PORT;
@@ -15,6 +17,9 @@ app.use(cors({
 
 // Parse JSON request bodies
 app.use(express.json());
+
+// Secure and sanitize all outbound JSON payloads
+app.use(cleanApiResponse);
 
 // Application API routes
 app.use('/api', router);
@@ -37,8 +42,13 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
-// Start listening
-app.listen(PORT, () => {
-  console.log(`[Server] Express server running on port ${PORT}`);
-  console.log(`[Server] Health check: http://localhost:${PORT}/health`);
-});
+// Start connection and server listener
+async function startServer() {
+  await connectDatabase();
+  app.listen(PORT, () => {
+    console.log(`[Server] Express server running on port ${PORT}`);
+    console.log(`[Server] Health check: http://localhost:${PORT}/health`);
+  });
+}
+
+startServer();
