@@ -250,7 +250,7 @@ export default function Dashboard() {
           <button
             onClick={handleLogout}
             title="Log Out"
-            className="p-1.5 rounded-lg hover:bg-slate-200/60 text-slate-500 hover:text-red-500 transition-colors"
+            className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100/80 text-red-500 hover:text-red-600 transition-colors border border-red-100/80"
           >
             <LogOut className="w-4.5 h-4.5" />
           </button>

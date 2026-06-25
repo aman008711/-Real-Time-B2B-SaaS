@@ -54,11 +54,8 @@ export async function register(req: Request, res: Response): Promise<void> {
       { expiresIn: '7d' }
     );
 
-    // Omit passwordHash in response
-    const { passwordHash: _, ...userWithoutPassword } = user;
-
     res.status(201).json({
-      user: userWithoutPassword,
+      user: user.toJSON(),
       token,
     });
   } catch (error: any) {
@@ -97,10 +94,8 @@ export async function login(req: Request, res: Response): Promise<void> {
       { expiresIn: '7d' }
     );
 
-    const { passwordHash: _, ...userWithoutPassword } = user;
-
     res.status(200).json({
-      user: userWithoutPassword,
+      user: user.toJSON(),
       token,
     });
   } catch (error: any) {
@@ -121,8 +116,7 @@ export async function me(req: AuthenticatedRequest, res: Response): Promise<void
       return;
     }
 
-    const { passwordHash: _, ...userWithoutPassword } = user;
-    res.status(200).json(userWithoutPassword);
+    res.status(200).json(user.toJSON());
   } catch (error: any) {
     res.status(500).json({ error: 'Internal server error' });
   }
