@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { api } from '../services/api';
 import { Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 
@@ -31,9 +32,12 @@ export default function Login() {
 
     try {
       await api.login(trimmedEmail, password);
+      toast.success('Signed in successfully!');
       navigate('/');
     } catch (err: any) {
-      setError(err.message || 'Failed to sign in. Please check your credentials.');
+      const errMsg = err.message || 'Failed to sign in. Please check your credentials.';
+      setError(errMsg);
+      toast.error(errMsg);
     } finally {
       setLoading(false);
     }

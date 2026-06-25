@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { api, type User, type Workspace, type Message } from '../services/api';
 import {
   LogOut,
@@ -22,11 +23,20 @@ export default function Dashboard() {
   const [activeChannel, setActiveChannel] = useState('general');
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
+  const [messagesLoading, setMessagesLoading] = useState(false);
   
   // Workspace creation modal state
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const [newWorkspaceDesc, setNewWorkspaceDesc] = useState('');
+
+  // Channel creation modal state
+  const [isCreatingChannel, setIsCreatingChannel] = useState(false);
+  const [newChannelName, setNewChannelName] = useState('');
+
+  // Member invitation modal state
+  const [isInvitingMember, setIsInvitingMember] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
 
   const navigate = useNavigate();
 
@@ -68,11 +78,14 @@ export default function Dashboard() {
     if (!activeWorkspace) return;
     const wsId = activeWorkspace.id;
     async function fetchMessages() {
+      setMessagesLoading(true);
       try {
         const msgs = await api.getMessages(wsId, activeChannel);
         setMessages(msgs);
       } catch (err) {
         console.error('Failed to fetch messages:', err);
+      } finally {
+        setMessagesLoading(false);
       }
     }
     fetchMessages();
@@ -86,8 +99,9 @@ export default function Dashboard() {
       const savedMsg = await api.sendMessage(wsId, activeChannel, newMessage.trim());
       setMessages(prev => [...prev, savedMsg]);
       setNewMessage('');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to send message:', err);
+      toast.error(err.message || 'Failed to send message');
     }
   };
 
@@ -98,11 +112,46 @@ export default function Dashboard() {
       const newWs = await api.createWorkspace(newWorkspaceName.trim(), newWorkspaceDesc.trim());
       setWorkspaces(prev => [...prev, newWs]);
       setActiveWorkspace(newWs);
+      setActiveChannel(newWs.channels?.[0] || 'general');
       setNewWorkspaceName('');
       setNewWorkspaceDesc('');
       setIsCreatingWorkspace(false);
-    } catch (err) {
+      toast.success('Workspace created successfully!');
+    } catch (err: any) {
       console.error('Failed to create workspace:', err);
+      toast.error(err.message || 'Failed to create workspace');
+    }
+  };
+
+  const handleCreateChannel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newChannelName.trim() || !activeWorkspace) return;
+    try {
+      const updatedWs = await api.createChannel(activeWorkspace.id, newChannelName.trim());
+      setWorkspaces(prev => prev.map(w => w.id === updatedWs.id ? updatedWs : w));
+      setActiveWorkspace(updatedWs);
+      const formattedChannelName = newChannelName.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '');
+      setActiveChannel(formattedChannelName);
+      setNewChannelName('');
+      setIsCreatingChannel(false);
+      toast.success('Channel created successfully!');
+    } catch (err: any) {
+      console.error('Failed to create channel:', err);
+      toast.error(err.message || 'Failed to create channel');
+    }
+  };
+
+  const handleInviteMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim() || !activeWorkspace) return;
+    try {
+      const result = await api.inviteMember(activeWorkspace.id, inviteEmail.trim());
+      toast.success(result.message || 'Member invited successfully!');
+      setInviteEmail('');
+      setIsInvitingMember(false);
+    } catch (err: any) {
+      console.error('Failed to invite member:', err);
+      toast.error(err.message || 'Failed to invite member');
     }
   };
 
@@ -167,7 +216,10 @@ export default function Dashboard() {
               {workspaces.map((ws) => (
                 <li key={ws.id}>
                   <button
-                    onClick={() => setActiveWorkspace(ws)}
+                    onClick={() => {
+                      setActiveWorkspace(ws);
+                      setActiveChannel(ws.channels?.[0] || 'general');
+                    }}
                     className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs text-left transition-all duration-150 ${
                       activeWorkspace?.id === ws.id
                         ? 'bg-slate-200/70 text-slate-900 font-semibold shadow-xs'
@@ -188,10 +240,16 @@ export default function Dashboard() {
           <div>
             <div className="flex items-center justify-between px-3 mb-2">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Channels</span>
-              <Plus className="w-3.5 h-3.5 text-slate-450 hover:text-slate-700 cursor-pointer" />
+              <button 
+                onClick={() => setIsCreatingChannel(true)}
+                className="p-0.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-700 transition-colors"
+                title="Create Channel"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
             </div>
-            <ul className="space-y-0.5">
-              {['general', 'engineering-sync', 'design-assets'].map((channel) => (
+            <ul className="space-y-0.5 mb-4">
+              {(activeWorkspace?.channels || ['general']).map((channel) => (
                 <li key={channel}>
                   <button
                     onClick={() => setActiveChannel(channel)}
@@ -207,6 +265,17 @@ export default function Dashboard() {
                 </li>
               ))}
             </ul>
+
+            {/* Invite Member Action */}
+            <div className="px-1.5">
+              <button 
+                onClick={() => setIsInvitingMember(true)}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-slate-300 hover:border-violet-500 rounded-lg text-xs text-slate-600 hover:text-violet-650 hover:bg-violet-50/20 transition-all font-medium"
+              >
+                <Users className="w-3.5 h-3.5 text-slate-450" />
+                <span>Invite Member</span>
+              </button>
+            </div>
           </div>
 
           {/* Admin settings section (visible based on user role) */}
@@ -296,29 +365,44 @@ export default function Dashboard() {
               <p className="text-xs text-slate-500 mt-1">This is the start of the #{activeChannel} channel in {activeWorkspace?.name}. Use it to share announcements and collaborate.</p>
             </div>
 
-            <div className="space-y-4">
-              {messages.map(msg => (
-                <div key={msg.id} className="flex items-start gap-3 hover:bg-slate-100/40 p-2 rounded-xl transition-colors">
-                  <div className="w-9 h-9 rounded-xl bg-linear-to-tr from-violet-600 to-indigo-600 flex items-center justify-center font-bold text-white shrink-0 text-sm shadow-xs">
-                    {(msg.senderId?.name || 'U').charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-xs font-semibold text-slate-900">{msg.senderId?.name || 'Unknown'}</span>
-                      <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                        msg.senderId?.role === 'admin'
-                          ? 'bg-red-500/10 text-red-500'
-                          : 'bg-violet-500/10 text-violet-500'
-                      }`}>{msg.senderId?.role || 'member'}</span>
-                      <span className="text-[10px] text-slate-400">
-                        {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
+            {messagesLoading ? (
+              <div className="space-y-5 animate-pulse">
+                {[1, 2, 3].map((n) => (
+                  <div key={n} className="flex items-start gap-3 p-2">
+                    <div className="w-9 h-9 rounded-xl bg-slate-200 shrink-0" />
+                    <div className="flex-1 space-y-2 mt-1">
+                      <div className="h-3.5 bg-slate-200 rounded-sm w-32" />
+                      <div className="h-3 bg-slate-200 rounded-sm w-full" />
+                      <div className="h-3 bg-slate-200 rounded-sm w-2/3" />
                     </div>
-                    <p className="text-sm text-slate-700 mt-1 wrap-break-word">{msg.text}</p>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {messages.map(msg => (
+                  <div key={msg.id} className="flex items-start gap-3 hover:bg-slate-100/40 p-2 rounded-xl transition-colors">
+                    <div className="w-9 h-9 rounded-xl bg-linear-to-tr from-violet-600 to-indigo-600 flex items-center justify-center font-bold text-white shrink-0 text-sm shadow-xs">
+                      {(msg.senderId?.name || 'U').charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs font-semibold text-slate-900">{msg.senderId?.name || 'Unknown'}</span>
+                        <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                          msg.senderId?.role === 'admin'
+                            ? 'bg-red-500/10 text-red-500'
+                            : 'bg-violet-500/10 text-violet-500'
+                        }`}>{msg.senderId?.role || 'member'}</span>
+                        <span className="text-[10px] text-slate-400">
+                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-700 mt-1 wrap-break-word">{msg.text}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Message Input Box */}
@@ -386,6 +470,80 @@ export default function Dashboard() {
                   className="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg font-semibold text-xs transition-colors"
                 >
                   Create Workspace
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Channel Creation Modal */}
+      {isCreatingChannel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl p-6 border border-slate-200 max-w-md w-full shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <h3 className="text-sm font-bold text-slate-900 mb-4">Create New Channel</h3>
+            <form onSubmit={handleCreateChannel} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Channel Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. engineering-sync"
+                  value={newChannelName}
+                  onChange={(e) => setNewChannelName(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-500"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingChannel(false)}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-650 rounded-lg font-semibold text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg font-semibold text-xs transition-colors"
+                >
+                  Create Channel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Member Invitation Modal */}
+      {isInvitingMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl p-6 border border-slate-200 max-w-md w-full shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <h3 className="text-sm font-bold text-slate-900 mb-4">Invite Member to Workspace</h3>
+            <form onSubmit={handleInviteMember} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">User Email Address</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="e.g. colleague@company.com"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-500"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsInvitingMember(false)}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-650 rounded-lg font-semibold text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg font-semibold text-xs transition-colors"
+                >
+                  Invite User
                 </button>
               </div>
             </form>

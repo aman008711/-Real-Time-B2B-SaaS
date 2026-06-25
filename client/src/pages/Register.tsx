@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { api } from '../services/api';
 import { Mail, Lock, User as UserIcon, Shield, ArrowRight, Loader2 } from 'lucide-react';
 
@@ -23,9 +24,12 @@ export default function Register() {
 
     try {
       await api.register(email, password, name, role);
+      toast.success('Account created successfully!');
       navigate('/');
     } catch (err: any) {
-      setError(err.message || 'Failed to create account.');
+      const errMsg = err.message || 'Failed to create account.';
+      setError(errMsg);
+      toast.error(errMsg);
     } finally {
       setLoading(false);
     }
