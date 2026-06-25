@@ -135,8 +135,8 @@ export const api = {
     });
   },
 
-  async inviteMember(workspaceId: string, email: string): Promise<{ message: string; user: { id: string; name: string; email: string; role: string } }> {
-    return request<{ message: string; user: { id: string; name: string; email: string; role: string } }>(`/workspaces/${workspaceId}/members`, {
+  async inviteMember(workspaceId: string, email: string): Promise<{ message: string; user: { id: string; name: string; email: string; role: string }; workspace: Workspace }> {
+    return request<{ message: string; user: { id: string; name: string; email: string; role: string }; workspace: Workspace }>(`/workspaces/${workspaceId}/members`, {
       method: 'POST',
       body: JSON.stringify({ email }),
     });

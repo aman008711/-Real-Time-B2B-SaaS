@@ -182,7 +182,8 @@ export async function inviteMember(req: AuthenticatedRequest, res: Response): Pr
         name: invitedUser.name,
         email: invitedUser.email,
         role: invitedUser.role,
-      }
+      },
+      workspace
     });
   } catch (error: any) {
     console.error('Invite member error:', error);

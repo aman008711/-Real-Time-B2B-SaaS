@@ -147,6 +147,10 @@ export default function Dashboard() {
     try {
       const result = await api.inviteMember(activeWorkspace.id, inviteEmail.trim());
       toast.success(result.message || 'Member invited successfully!');
+      if (result.workspace) {
+        setWorkspaces(prev => prev.map(w => w.id === result.workspace.id ? result.workspace : w));
+        setActiveWorkspace(result.workspace);
+      }
       setInviteEmail('');
       setIsInvitingMember(false);
     } catch (err: any) {
@@ -269,7 +273,7 @@ export default function Dashboard() {
             {/* Invite Member Action */}
             <div className="px-1.5">
               <button 
-                onClick={() => setIsInvitingMember(true)}
+                onClick={() => { setInviteEmail(''); setIsInvitingMember(true); }}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-slate-300 hover:border-violet-500 rounded-lg text-xs text-slate-600 hover:text-violet-650 hover:bg-violet-50/20 transition-all font-medium"
               >
                 <Users className="w-3.5 h-3.5 text-slate-450" />
@@ -534,7 +538,7 @@ export default function Dashboard() {
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setIsInvitingMember(false)}
+                  onClick={() => { setInviteEmail(''); setIsInvitingMember(false); }}
                   className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-650 rounded-lg font-semibold text-xs transition-colors"
                 >
                   Cancel
