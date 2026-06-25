@@ -12,6 +12,11 @@ const envSchema = z.object({
   }).min(16, 'JWT_SECRET must be at least 16 characters long'),
   CLIENT_ORIGIN: z.string().default('http://localhost:5173'),
   MONGO_URI: z.string().default('mongodb://127.0.0.1:27017/slacknotion'),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().default('587').transform((val) => parseInt(val, 10)),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().default('SlackNotion <no-reply@slacknotion.com>'),
 });
 
 const parseResult = envSchema.safeParse(process.env);

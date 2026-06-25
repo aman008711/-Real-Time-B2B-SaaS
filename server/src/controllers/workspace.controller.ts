@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import { WorkspaceModel } from '../models/workspace.model';
 import { userRepository } from '../models/user.model';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
+import { sendInviteEmail } from '../utils/mailer';
 
 // Validation Schemas
 const createWorkspaceSchema = z.object({
@@ -174,6 +175,13 @@ export async function inviteMember(req: AuthenticatedRequest, res: Response): Pr
 
     workspace.members.push(invitedUser._id as any);
     await workspace.save();
+
+    // Fetch inviter user details from DB to get their name
+    const inviter = await userRepository.findById(req.user.id);
+    const inviterName = inviter ? inviter.name : 'A colleague';
+
+    // Dispatch invitation email asynchronously (runs in background)
+    sendInviteEmail(invitedUser.email, inviterName, workspace.name);
 
     res.status(200).json({
       message: 'Member invited successfully',
