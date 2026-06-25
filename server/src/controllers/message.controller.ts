@@ -1,8 +1,15 @@
 import { Response } from 'express';
+import { z } from 'zod';
+import mongoose from 'mongoose';
 import { MessageModel } from '../models/message.model';
 import { WorkspaceModel } from '../models/workspace.model';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
-import mongoose from 'mongoose';
+
+// Validation Schemas
+const sendMessageSchema = z.object({
+  channel: z.string().min(1, 'Channel is required').trim().toLowerCase(),
+  text: z.string().min(1, 'Message text is required').trim(),
+});
 
 export async function sendMessage(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -12,18 +19,18 @@ export async function sendMessage(req: AuthenticatedRequest, res: Response): Pro
     }
 
     const { workspaceId } = req.params;
-    const { channel, text } = req.body;
-
     if (!workspaceId || !mongoose.Types.ObjectId.isValid(workspaceId)) {
       res.status(400).json({ error: 'Invalid workspace identifier' });
       return;
     }
 
-    if (!channel || !text) {
-      res.status(400).json({ error: 'Channel name and text content are required' });
+    const parseResult = sendMessageSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({ error: parseResult.error.errors[0].message });
       return;
     }
 
+    const { channel, text } = parseResult.data;
     const userId = new mongoose.Types.ObjectId(req.user.id);
     const workspace = await WorkspaceModel.findById(workspaceId).exec();
 
@@ -39,6 +46,12 @@ export async function sendMessage(req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
+    // Verify if the channel is registered in the workspace
+    if (!workspace.channels.includes(channel)) {
+      res.status(400).json({ error: `Channel #${channel} does not exist in this workspace` });
+      return;
+    }
+
     const message = new MessageModel({
       workspaceId: new mongoose.Types.ObjectId(workspaceId),
       channel,
@@ -51,6 +64,7 @@ export async function sendMessage(req: AuthenticatedRequest, res: Response): Pro
 
     res.status(201).json(message);
   } catch (error: any) {
+    console.error('Send message error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -89,9 +103,16 @@ export async function getMessages(req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
+    // Verify if the channel is registered in the workspace
+    const channelLower = channel.toLowerCase().trim();
+    if (!workspace.channels.includes(channelLower)) {
+      res.status(400).json({ error: `Channel #${channelLower} does not exist in this workspace` });
+      return;
+    }
+
     const messages = await MessageModel.find({
       workspaceId: new mongoose.Types.ObjectId(workspaceId),
-      channel,
+      channel: channelLower,
     })
       .sort({ createdAt: 1 })
       .populate('senderId', 'name role email')
@@ -99,6 +120,7 @@ export async function getMessages(req: AuthenticatedRequest, res: Response): Pro
 
     res.status(200).json(messages);
   } catch (error: any) {
+    console.error('Get messages error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createWorkspace, getWorkspaces } from '../controllers/workspace.controller';
+import { createWorkspace, getWorkspaces, addChannel, inviteMember } from '../controllers/workspace.controller';
 import { sendMessage, getMessages } from '../controllers/message.controller';
 import { authenticateToken } from '../middleware/auth.middleware';
 
@@ -10,6 +10,9 @@ router.use(authenticateToken as any);
 
 router.post('/', createWorkspace as any);
 router.get('/', getWorkspaces as any);
+
+router.post('/:workspaceId/channels', addChannel as any);
+router.post('/:workspaceId/members', inviteMember as any);
 
 router.post('/:workspaceId/messages', sendMessage as any);
 router.get('/:workspaceId/messages', getMessages as any);
