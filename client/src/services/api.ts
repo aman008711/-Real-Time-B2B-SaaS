@@ -19,6 +19,7 @@ export interface Workspace {
   description?: string;
   ownerId: string;
   members: string[];
+  channels: string[];
   createdAt: string;
 }
 
@@ -124,6 +125,20 @@ export const api = {
     return request<Workspace>('/workspaces', {
       method: 'POST',
       body: JSON.stringify({ name, description }),
+    });
+  },
+
+  async createChannel(workspaceId: string, name: string): Promise<Workspace> {
+    return request<Workspace>(`/workspaces/${workspaceId}/channels`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  async inviteMember(workspaceId: string, email: string): Promise<{ message: string; user: { id: string; name: string; email: string; role: string } }> {
+    return request<{ message: string; user: { id: string; name: string; email: string; role: string } }>(`/workspaces/${workspaceId}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ email }),
     });
   },
 
