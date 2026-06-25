@@ -103,11 +103,19 @@ Verify compilation and prepare optimized builds using these commands:
 
 ---
 
-## 🧪 Week 1 Flow Verification
+## 🧪 Flow Verification
 
+### Week 1 Flow Verification
 The system registration, session persistence, role permissions, and route guards were verified successfully:
 1. **Route Guard**: Direct access to `http://localhost:5173/` redirects to `/login` without a token.
 2. **Registration**: Supports creating accounts with automatic schema validation (via Zod) and role definition (Admin vs Member).
 3. **Login**: Authenticates users using hashed credentials, signs a JWT (valid for 7 days), and stores it in `localStorage`.
 4. **Dashboard Control**: Displays the sidebar workspace layout, rendering administrative panels (e.g. workspace settings, user management) exclusively for `admin` role members.
 5. **Logout**: Safely clears tokens and redirects the browser session to `/login`.
+
+### Week 2 Flow Verification
+Workspace navigation, channel selection, and messages rendering were successfully verified:
+1. **Workspace Management**: Users can dynamically create new workspaces and list all workspaces they belong to.
+2. **Channel-Based Messaging**: Message routing, persistence in MongoDB, and population of sender details are active for default channels (`#general`, `#engineering-sync`, `#design-assets`). Access is protected to ensure only workspace members can read/write messages.
+3. **User Profile Display**: Integrated clean serialization (using `.toJSON()`) in the auth controller to reliably display the authenticated user's name, role, and avatar initials in the sidebar footer.
+4. **Logout UX Styling**: Redesigned the logout button to utilize a warning-red interface (`bg-red-50 text-red-500 hover:bg-red-100/80`) for enhanced visual affordance.
