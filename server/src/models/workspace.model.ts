@@ -6,6 +6,7 @@ export interface IWorkspace extends Document {
   ownerId: mongoose.Types.ObjectId;
   members: mongoose.Types.ObjectId[];
   channels: string[];
+  invitedEmails: string[];
   createdAt: Date;
 }
 
@@ -15,6 +16,7 @@ const WorkspaceSchema: Schema = new Schema({
   ownerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   members: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   channels: { type: [String], default: ['general'] },
+  invitedEmails: { type: [String], default: [] },
   createdAt: { type: Date, default: Date.now }
 });
 
