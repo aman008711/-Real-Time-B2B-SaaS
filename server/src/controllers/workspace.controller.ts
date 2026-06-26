@@ -159,40 +159,60 @@ export async function inviteMember(req: AuthenticatedRequest, res: Response): Pr
       return;
     }
 
-    // Find the user to invite
-    const invitedUser = await userRepository.findByEmail(email);
-    if (!invitedUser) {
-      res.status(404).json({ error: 'User with this email not found' });
-      return;
-    }
-
-    // Check if user is already a member
-    const isAlreadyMember = workspace.members.some((memberId) => memberId.equals(invitedUser.id));
-    if (isAlreadyMember) {
-      res.status(400).json({ error: 'User is already a member of this workspace' });
-      return;
-    }
-
-    workspace.members.push(invitedUser._id as any);
-    await workspace.save();
-
     // Fetch inviter user details from DB to get their name
     const inviter = await userRepository.findById(req.user.id);
     const inviterName = inviter ? inviter.name : 'A colleague';
 
-    // Dispatch invitation email asynchronously (runs in background)
-    sendInviteEmail(invitedUser.email, inviterName, workspace.name);
+    // Find the user to invite
+    const invitedUser = await userRepository.findByEmail(email);
 
-    res.status(200).json({
-      message: 'Member invited successfully',
-      user: {
-        id: invitedUser.id,
-        name: invitedUser.name,
-        email: invitedUser.email,
-        role: invitedUser.role,
-      },
-      workspace
-    });
+    if (invitedUser) {
+      // Check if user is already a member
+      const isAlreadyMember = workspace.members.some((memberId) => memberId.equals(invitedUser.id));
+      if (isAlreadyMember) {
+        res.status(400).json({ error: 'User is already a member of this workspace' });
+        return;
+      }
+
+      workspace.members.push(invitedUser._id as any);
+      await workspace.save();
+
+      // Dispatch invitation email asynchronously (runs in background)
+      sendInviteEmail(invitedUser.email, inviterName, workspace.name);
+
+      res.status(200).json({
+        message: 'Member invited successfully',
+        user: {
+          id: invitedUser.id,
+          name: invitedUser.name,
+          email: invitedUser.email,
+          role: invitedUser.role,
+        },
+        workspace
+      });
+    } else {
+      // Unregistered user invite
+      if (!workspace.invitedEmails) {
+        workspace.invitedEmails = [];
+      }
+
+      // Only add to pending if not already there
+      const isAlreadyInvited = workspace.invitedEmails.includes(email);
+      if (!isAlreadyInvited) {
+        workspace.invitedEmails.push(email);
+        await workspace.save();
+      }
+
+      // Dispatch invitation email asynchronously (runs in background)
+      sendInviteEmail(email, inviterName, workspace.name);
+
+      res.status(200).json({
+        message: isAlreadyInvited
+          ? 'Invitation email re-sent successfully to unregistered user'
+          : 'Invitation email sent successfully to unregistered user',
+        workspace
+      });
+    }
   } catch (error: any) {
     console.error('Invite member error:', error);
     res.status(500).json({ error: 'Internal server error' });
