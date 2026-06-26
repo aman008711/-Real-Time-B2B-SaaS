@@ -1,9 +1,11 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import http from 'http';
 import { env } from './config/env';
 import router from './routes';
 import { connectDatabase } from './config/db';
 import { cleanApiResponse } from './middleware/clean-response.middleware';
+import { initSocketServer } from './socket';
 
 const app = express();
 const PORT = env.PORT;
@@ -42,10 +44,16 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
+// Create HTTP server wrapping Express app
+const server = http.createServer(app);
+
+// Initialize Socket.IO server
+initSocketServer(server);
+
 // Start connection and server listener
 async function startServer() {
   await connectDatabase();
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`[Server] Express server running on port ${PORT}`);
     console.log(`[Server] Health check: http://localhost:${PORT}/health`);
   });
