@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { env } from '../config/env';
 import { userRepository } from '../models/user.model';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
+import { WorkspaceModel } from '../models/workspace.model';
 
 // Input Validation Schemas
 const registerSchema = z.object({
@@ -46,6 +47,27 @@ export async function register(req: Request, res: Response): Promise<void> {
       name,
       role,
     });
+
+    // Auto-join workspaces where this email was previously invited
+    try {
+      const userObjectId = user._id;
+      const normalizedEmail = email.toLowerCase().trim();
+      
+      const workspacesToJoin = await WorkspaceModel.find({ invitedEmails: normalizedEmail }).exec();
+      
+      for (const workspace of workspacesToJoin) {
+        const isMember = workspace.members.some((memberId) => memberId.toString() === userObjectId.toString());
+        if (!isMember) {
+          workspace.members.push(userObjectId as any);
+        }
+        workspace.invitedEmails = workspace.invitedEmails.filter(
+          (invitedEmail) => invitedEmail.toLowerCase().trim() !== normalizedEmail
+        );
+        await workspace.save();
+      }
+    } catch (dbErr) {
+      console.error('⚠️ [Auth Register] Failed to auto-join workspaces for invited user:', dbErr);
+    }
 
     // Generate JWT
     const token = jwt.sign(
