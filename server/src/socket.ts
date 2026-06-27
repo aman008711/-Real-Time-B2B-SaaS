@@ -1,6 +1,8 @@
 import { Server as SocketIOServer } from 'socket.io';
 import http from 'http';
+import jwt from 'jsonwebtoken';
 import { env } from './config/env';
+import { userRepository } from './models/user.model';
 import {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -27,12 +29,54 @@ export function initSocketServer(httpServer: http.Server): SocketIOServer<
     },
   });
 
+  // Socket.IO Connection Authentication Middleware
+  io.use(async (socket, next) => {
+    try {
+      const authHeader = socket.handshake.auth.token || socket.handshake.headers['authorization'];
+      
+      if (!authHeader) {
+        console.warn(`🔒 [Socket Auth] Connection rejected: No token provided for socket ${socket.id}`);
+        return next(new Error('Authentication error: Token required'));
+      }
+
+      const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
+
+      jwt.verify(token, env.JWT_SECRET, async (err: any, decoded: any) => {
+        if (err) {
+          console.warn(`🔒 [Socket Auth] Connection rejected: Invalid or expired token for socket ${socket.id}`);
+          return next(new Error('Authentication error: Invalid token'));
+        }
+
+        const decodedPayload = decoded as { id: string; email: string; role: 'admin' | 'member' };
+        
+        // Fetch user from DB to verify they still exist and get their full profile details (like name)
+        const user = await userRepository.findById(decodedPayload.id);
+        if (!user) {
+          console.warn(`🔒 [Socket Auth] Connection rejected: User not found in database for ID ${decodedPayload.id}`);
+          return next(new Error('Authentication error: User not found'));
+        }
+
+        // Cache user details inside socket.data for access in future event handlers
+        socket.data.userId = user.id;
+        socket.data.username = user.name;
+        socket.data.email = user.email;
+        socket.data.role = user.role;
+
+        console.log(`🔒 [Socket Auth] Socket ${socket.id} successfully authenticated for: ${user.name} (${user.email})`);
+        next();
+      });
+    } catch (error) {
+      console.error('🔒 [Socket Auth] Unexpected authentication error:', error);
+      next(new Error('Authentication error: Internal server error'));
+    }
+  });
+
   io.on('connection', (socket) => {
-    console.log(`🔌 [Socket] Client connected: ${socket.id}`);
+    console.log(`🔌 [Socket] Client connected: ${socket.id} (User: ${socket.data.username})`);
 
     // Track when client disconnects
     socket.on('disconnect', (reason) => {
-      console.log(`🔌 [Socket] Client disconnected: ${socket.id} (Reason: ${reason})`);
+      console.log(`🔌 [Socket] Client disconnected: ${socket.id} (User: ${socket.data.username}, Reason: ${reason})`);
     });
   });
 
