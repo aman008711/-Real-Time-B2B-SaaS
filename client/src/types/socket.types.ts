@@ -1,3 +1,19 @@
+export interface JoinChannelPayload {
+  workspaceId: string;
+  channel: string;
+}
+
+export interface SendMessagePayload {
+  workspaceId: string;
+  channel: string;
+  text: string;
+}
+
+export interface TypingIndicatorPayload {
+  workspaceId: string;
+  channel: string;
+}
+
 export interface MessagePayload {
   id: string;
   workspaceId: string;
@@ -14,11 +30,11 @@ export interface MessagePayload {
 }
 
 export interface ClientToServerEvents {
-  join_channel: (payload: { workspaceId: string; channel: string }) => void;
-  leave_channel: (payload: { workspaceId: string; channel: string }) => void;
-  send_message: (payload: { workspaceId: string; channel: string; text: string }) => void;
-  typing_start: (payload: { workspaceId: string; channel: string }) => void;
-  typing_stop: (payload: { workspaceId: string; channel: string }) => void;
+  join_channel: (payload: JoinChannelPayload) => void;
+  leave_channel: (payload: JoinChannelPayload) => void;
+  send_message: (payload: SendMessagePayload) => void;
+  typing_start: (payload: TypingIndicatorPayload) => void;
+  typing_stop: (payload: TypingIndicatorPayload) => void;
 }
 
 export interface ServerToClientEvents {
