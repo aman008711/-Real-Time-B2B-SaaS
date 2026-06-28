@@ -36,6 +36,7 @@ export interface Message {
   };
   text: string;
   createdAt: string;
+  status?: 'sending' | 'error';
 }
 
 export function getToken(): string | null {

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { api, type User, type Workspace, type Message } from '../services/api';
+import { useSocket } from '../context/SocketContext';
 import {
   LogOut,
   Hash,
@@ -73,6 +74,70 @@ export default function Dashboard() {
     initDashboard();
   }, [navigate]);
 
+  const { socket, isConnected, setActiveRoom } = useSocket();
+
+  // Track active room in socket context whenever active workspace or channel switches
+  useEffect(() => {
+    if (!activeWorkspace) {
+      setActiveRoom(null);
+      return;
+    }
+    setActiveRoom({ workspaceId: activeWorkspace.id, channel: activeChannel });
+  }, [activeWorkspace, activeChannel, setActiveRoom]);
+
+  // Handle incoming real-time Socket.IO messages
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleMessageReceived = (msgPayload: any) => {
+      // Ensure the incoming broadcast matches the channel we are viewing
+      if (
+        activeWorkspace &&
+        msgPayload.workspaceId === activeWorkspace.id &&
+        msgPayload.channel === activeChannel
+      ) {
+        // Map message payload to frontend Message schema
+        const msg: Message = {
+          id: msgPayload.id,
+          workspaceId: msgPayload.workspaceId,
+          channel: msgPayload.channel,
+          text: msgPayload.text,
+          createdAt: msgPayload.createdAt,
+          senderId: {
+            id: msgPayload.sender.id,
+            name: msgPayload.sender.username,
+            email: msgPayload.sender.email,
+            role: msgPayload.sender.role,
+          },
+        };
+
+        setMessages((prev) => {
+          // If we find an optimistic message (sending status & matching text), replace it
+          const optimisticIndex = prev.findIndex(
+            (m) => m.status === 'sending' && m.text === msg.text
+          );
+          if (optimisticIndex !== -1) {
+            const updated = [...prev];
+            updated[optimisticIndex] = msg;
+            return updated;
+          }
+
+          // Avoid duplicates (e.g. if we fetched REST API simultaneously)
+          if (prev.some((m) => m.id === msg.id)) {
+            return prev;
+          }
+          return [...prev, msg];
+        });
+      }
+    };
+
+    socket.on('message_received', handleMessageReceived);
+
+    return () => {
+      socket.off('message_received', handleMessageReceived);
+    };
+  }, [socket, activeWorkspace, activeChannel]);
+
   // Fetch messages from MongoDB when workspace or channel changes
   useEffect(() => {
     if (!activeWorkspace) return;
@@ -95,12 +160,60 @@ export default function Dashboard() {
     e.preventDefault();
     if (!newMessage.trim() || !user || !activeWorkspace) return;
     const wsId = activeWorkspace.id;
+    const messageText = newMessage.trim();
+
+    // 1. Build optimistic message object to display immediately
+    const optimisticId = `optimistic-${Date.now()}`;
+    const optimisticMsg: Message = {
+      id: optimisticId,
+      workspaceId: wsId,
+      channel: activeChannel,
+      text: messageText,
+      createdAt: new Date().toISOString(),
+      senderId: {
+        id: user.id,
+        name: user.name,
+        role: user.role,
+        email: user.email,
+      },
+      status: 'sending',
+    };
+
+    // Render immediately
+    setMessages(prev => [...prev, optimisticMsg]);
+    setNewMessage('');
+
     try {
-      const savedMsg = await api.sendMessage(wsId, activeChannel, newMessage.trim());
-      setMessages(prev => [...prev, savedMsg]);
-      setNewMessage('');
+      if (socket && isConnected) {
+        // 2. Emit send_message via websocket
+        socket.emit('send_message', {
+          workspaceId: wsId,
+          channel: activeChannel,
+          text: messageText,
+        });
+
+        // 3. Fallback timeout: if the server does not confirm the message within 5s, flag it
+        setTimeout(() => {
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === optimisticId && m.status === 'sending'
+                ? { ...m, status: 'error' }
+                : m
+            )
+          );
+        }, 5000);
+      } else {
+        // Fallback to HTTP REST endpoint if websocket is offline
+        const savedMsg = await api.sendMessage(wsId, activeChannel, messageText);
+        setMessages(prev =>
+          prev.map(m => (m.id === optimisticId ? savedMsg : m))
+        );
+      }
     } catch (err: any) {
       console.error('Failed to send message:', err);
+      setMessages(prev =>
+        prev.map(m => (m.id === optimisticId ? { ...m, status: 'error' } : m))
+      );
       toast.error(err.message || 'Failed to send message');
     }
   };
@@ -307,8 +420,16 @@ export default function Dashboard() {
         {/* User profile footer */}
         <div className="p-3 border-t border-slate-200 bg-slate-100/60 flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8.5 h-8.5 rounded-xl bg-linear-to-tr from-violet-600 to-indigo-600 flex items-center justify-center font-bold text-white shrink-0 text-sm">
-              {(user?.name || 'U').charAt(0).toUpperCase()}
+            <div className="relative shrink-0">
+              <div className="w-8.5 h-8.5 rounded-xl bg-linear-to-tr from-violet-600 to-indigo-600 flex items-center justify-center font-bold text-white text-sm">
+                {(user?.name || 'U').charAt(0).toUpperCase()}
+              </div>
+              <span 
+                className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-slate-100 ${
+                  isConnected ? 'bg-green-500' : 'bg-red-500'
+                }`}
+                title={isConnected ? 'Connected' : 'Offline'}
+              />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-semibold text-slate-800 truncate leading-none">{user?.name}</p>
@@ -342,6 +463,12 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-4">
+            {!isConnected && (
+              <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg animate-pulse flex items-center gap-1 shadow-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping shrink-0" />
+                Offline (Reconnecting...)
+              </span>
+            )}
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400">
                 <Search className="w-3.5 h-3.5" />
@@ -385,7 +512,12 @@ export default function Dashboard() {
             ) : (
               <div className="space-y-4">
                 {messages.map(msg => (
-                  <div key={msg.id} className="flex items-start gap-3 hover:bg-slate-100/40 p-2 rounded-xl transition-colors">
+                  <div 
+                    key={msg.id} 
+                    className={`flex items-start gap-3 hover:bg-slate-100/40 p-2 rounded-xl transition-colors ${
+                      msg.status === 'sending' ? 'opacity-65' : ''
+                    }`}
+                  >
                     <div className="w-9 h-9 rounded-xl bg-linear-to-tr from-violet-600 to-indigo-600 flex items-center justify-center font-bold text-white shrink-0 text-sm shadow-xs">
                       {(msg.senderId?.name || 'U').charAt(0).toUpperCase()}
                     </div>
@@ -400,8 +532,21 @@ export default function Dashboard() {
                         <span className="text-[10px] text-slate-400">
                           {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
+
+                        {msg.status === 'sending' && (
+                          <span className="text-[10px] text-slate-450 italic animate-pulse">
+                            (sending...)
+                          </span>
+                        )}
+                        {msg.status === 'error' && (
+                          <span className="text-[10px] text-red-500 font-semibold">
+                            ⚠️ Failed to send
+                          </span>
+                        )}
                       </div>
-                      <p className="text-sm text-slate-700 mt-1 wrap-break-word">{msg.text}</p>
+                      <p className={`text-sm mt-1 wrap-break-word ${
+                        msg.status === 'error' ? 'text-red-500/80 line-through' : 'text-slate-700'
+                      }`}>{msg.text}</p>
                     </div>
                   </div>
                 ))}
