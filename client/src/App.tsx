@@ -3,6 +3,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import { getToken, isTokenExpired, removeToken } from './services/api';
+import { SocketProvider } from './context/SocketContext';
 
 // Route protection wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -26,7 +27,9 @@ export default function App() {
           path="/" 
           element={
             <ProtectedRoute>
-              <Dashboard />
+              <SocketProvider>
+                <Dashboard />
+              </SocketProvider>
             </ProtectedRoute>
           } 
         />
