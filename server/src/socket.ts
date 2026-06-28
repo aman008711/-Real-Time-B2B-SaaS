@@ -1,10 +1,12 @@
 import { Server as SocketIOServer } from 'socket.io';
 import http from 'http';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import { env } from './config/env';
 import { userRepository } from './models/user.model';
 import { WorkspaceModel } from './models/workspace.model';
-import { joinChannelSchema } from './types/socket.validators';
+import { MessageModel } from './models/message.model';
+import { joinChannelSchema, sendMessageSchema } from './types/socket.validators';
 import {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -125,6 +127,72 @@ export function initSocketServer(httpServer: http.Server): SocketIOServer<
         console.log(`📡 [Socket Leave] User ${socket.data.username} left room: ${roomName}`);
       } catch (err) {
         console.error('❌ [Socket Leave] Unexpected error:', err);
+      }
+    });
+
+    // 3. Send Message Event Handler
+    socket.on('send_message', async (payload) => {
+      try {
+        const parseResult = sendMessageSchema.safeParse(payload);
+        if (!parseResult.success) {
+          console.warn(`⚠️ [Socket Message] Validation failed for socket ${socket.id}:`, parseResult.error.errors[0].message);
+          return;
+        }
+
+        const { workspaceId, channel, text } = parseResult.data;
+        const userIdStr = socket.data.userId;
+
+        // Verify workspace exists in DB
+        const workspace = await WorkspaceModel.findById(workspaceId).exec();
+        if (!workspace) {
+          console.warn(`⚠️ [Socket Message] Rejected: Workspace ${workspaceId} not found`);
+          return;
+        }
+
+        // Verify user is a member of the workspace
+        const isMember = workspace.members.some((memberId) => memberId.toString() === userIdStr);
+        if (!isMember) {
+          console.warn(`⚠️ [Socket Message] Forbidden: User ${socket.data.username} is not a member of workspace "${workspace.name}"`);
+          return;
+        }
+
+        // Verify channel exists in the workspace
+        if (!workspace.channels.includes(channel)) {
+          console.warn(`⚠️ [Socket Message] Rejected: Channel #${channel} does not exist in workspace "${workspace.name}"`);
+          return;
+        }
+
+        // Save message to MongoDB
+        const message = new MessageModel({
+          workspaceId: new mongoose.Types.ObjectId(workspaceId),
+          channel,
+          senderId: new mongoose.Types.ObjectId(userIdStr),
+          text,
+        });
+        await message.save();
+
+        // Construct response broadcast payload matching MessagePayload structure
+        const roomName = `workspace:${workspaceId}:channel:${channel}`;
+        const broadcastPayload = {
+          id: message._id.toString(),
+          workspaceId,
+          channel,
+          text,
+          senderId: userIdStr,
+          createdAt: message.createdAt.toISOString(),
+          sender: {
+            id: userIdStr,
+            username: socket.data.username,
+            email: socket.data.email,
+            role: socket.data.role,
+          },
+        };
+
+        // Broadcast to all clients in the channel room
+        io.to(roomName).emit('message_received', broadcastPayload);
+        console.log(`📡 [Socket Msg] Message from ${socket.data.username} broadcasted to room ${roomName}`);
+      } catch (err) {
+        console.error('❌ [Socket Message] Unexpected error:', err);
       }
     });
 
