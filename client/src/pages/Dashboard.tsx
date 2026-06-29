@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { api, type User, type Workspace, type Message } from '../services/api';
@@ -40,6 +40,7 @@ export default function Dashboard() {
   const [inviteEmail, setInviteEmail] = useState('');
 
   const navigate = useNavigate();
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     async function initDashboard() {
@@ -75,6 +76,16 @@ export default function Dashboard() {
   }, [navigate]);
 
   const { socket, isConnected, setActiveRoom } = useSocket();
+
+  const scrollToBottom = (behavior: 'smooth' | 'auto' = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
+  };
+
+  // Scroll to bottom whenever messages are loaded or a new message arrives
+  useEffect(() => {
+    const hasOptimistic = messages.some((m) => m.status === 'sending');
+    scrollToBottom(hasOptimistic ? 'smooth' : 'auto');
+  }, [messages]);
 
   // Track active room in socket context whenever active workspace or channel switches
   useEffect(() => {
@@ -218,6 +229,50 @@ export default function Dashboard() {
     }
   };
 
+  const handleRetrySendMessage = async (failedMsg: Message) => {
+    if (!user || !activeWorkspace) return;
+    const wsId = activeWorkspace.id;
+
+    // Reset status to sending in state
+    setMessages(prev =>
+      prev.map(m => (m.id === failedMsg.id ? { ...m, status: 'sending' } : m))
+    );
+
+    try {
+      if (socket && isConnected) {
+        // Retry emitting via socket
+        socket.emit('send_message', {
+          workspaceId: wsId,
+          channel: activeChannel,
+          text: failedMsg.text,
+        });
+
+        // Set fallback timeout
+        setTimeout(() => {
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === failedMsg.id && m.status === 'sending'
+                ? { ...m, status: 'error' }
+                : m
+            )
+          );
+        }, 5000);
+      } else {
+        // Fallback to HTTP REST endpoint if websocket is offline
+        const savedMsg = await api.sendMessage(wsId, activeChannel, failedMsg.text);
+        setMessages(prev =>
+          prev.map(m => (m.id === failedMsg.id ? savedMsg : m))
+        );
+      }
+    } catch (err: any) {
+      console.error('Failed to retry send:', err);
+      setMessages(prev =>
+        prev.map(m => (m.id === failedMsg.id ? { ...m, status: 'error' } : m))
+      );
+      toast.error('Retry failed: ' + (err.message || 'Unknown error'));
+    }
+  };
+
   const handleCreateWorkspace = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newWorkspaceName.trim()) return;
@@ -293,7 +348,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex overflow-hidden font-sans">
+    <div className="h-screen bg-slate-50 text-slate-800 flex overflow-hidden font-sans">
 
       {/* 1. Left Sidebar - Workspaces & Channels */}
       <aside className="w-64 bg-slate-50 border-r border-slate-200 flex flex-col shrink-0">
@@ -539,8 +594,15 @@ export default function Dashboard() {
                           </span>
                         )}
                         {msg.status === 'error' && (
-                          <span className="text-[10px] text-red-500 font-semibold">
-                            ⚠️ Failed to send
+                          <span className="text-[10px] text-red-500 font-semibold flex items-center gap-1.5">
+                            <span>⚠️ Failed to send</span>
+                            <button
+                              onClick={() => handleRetrySendMessage(msg)}
+                              className="text-[10px] text-violet-600 hover:text-violet-700 font-bold hover:underline bg-transparent border-0 cursor-pointer p-0"
+                              type="button"
+                            >
+                              Retry
+                            </button>
                           </span>
                         )}
                       </div>
@@ -552,6 +614,8 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
+            {/* Scroll Anchor */}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Message Input Box */}
