@@ -37,7 +37,7 @@ export function initSocketServer(httpServer: http.Server): SocketIOServer<
   io.use(async (socket, next) => {
     try {
       const authHeader = socket.handshake.auth.token || socket.handshake.headers['authorization'];
-      
+
       if (!authHeader) {
         console.warn(`🔒 [Socket Auth] Connection rejected: No token provided for socket ${socket.id}`);
         return next(new Error('Authentication error: Token required'));
@@ -52,7 +52,7 @@ export function initSocketServer(httpServer: http.Server): SocketIOServer<
         }
 
         const decodedPayload = decoded as { id: string; email: string; role: 'admin' | 'member' };
-        
+
         // Fetch user from DB to verify they still exist and get their full profile details (like name)
         const user = await userRepository.findById(decodedPayload.id);
         if (!user) {
