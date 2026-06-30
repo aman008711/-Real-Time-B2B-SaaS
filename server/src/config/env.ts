@@ -17,6 +17,7 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().default('SlackNotion <no-reply@slacknotion.com>'),
+  REDIS_URI: z.string().default('redis://127.0.0.1:6379'),
 });
 
 const parseResult = envSchema.safeParse(process.env);
