@@ -153,5 +153,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ channel, text }),
     });
+  },
+
+  async getOnlineUsers(): Promise<string[]> {
+    return request<string[]>('/presence/online');
   }
 };

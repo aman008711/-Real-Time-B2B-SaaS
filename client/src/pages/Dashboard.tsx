@@ -42,6 +42,12 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  // Online presence and typing indicators states
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const isTypingRef = useRef(false);
+  const typingTimeoutRef = useRef<any>(null);
+
   useEffect(() => {
     async function initDashboard() {
       try {
@@ -86,6 +92,94 @@ export default function Dashboard() {
     const hasOptimistic = messages.some((m) => m.status === 'sending');
     scrollToBottom(hasOptimistic ? 'smooth' : 'auto');
   }, [messages]);
+
+  // Reset typing indicators list when active channel changes
+  useEffect(() => {
+    setTypingUsers([]);
+  }, [activeChannel]);
+
+  // Fetch initial online user IDs
+  useEffect(() => {
+    async function fetchOnlineUsers() {
+      try {
+        const onlineIds = await api.getOnlineUsers();
+        setOnlineUsers(new Set(onlineIds));
+      } catch (err) {
+        console.error('Failed to fetch online user presence:', err);
+      }
+    }
+    if (user) {
+      fetchOnlineUsers();
+    }
+  }, [user]);
+
+  // Track socket listeners for presence events and typing alerts
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleUserPresence = (payload: { userId: string; username: string; status: 'online' | 'offline' }) => {
+      setOnlineUsers((prev) => {
+        const next = new Set(prev);
+        if (payload.status === 'online') {
+          next.add(payload.userId);
+        } else {
+          next.delete(payload.userId);
+        }
+        return next;
+      });
+    };
+
+    const handleUserTyping = (payload: { username: string; channel: string; isTyping: boolean }) => {
+      if (payload.channel === activeChannel) {
+        setTypingUsers((prev) => {
+          if (payload.isTyping) {
+            if (prev.includes(payload.username)) return prev;
+            return [...prev, payload.username];
+          } else {
+            return prev.filter((name) => name !== payload.username);
+          }
+        });
+      }
+    };
+
+    socket.on('user_presence', handleUserPresence);
+    socket.on('user_typing', handleUserTyping);
+
+    return () => {
+      socket.off('user_presence', handleUserPresence);
+      socket.off('user_typing', handleUserTyping);
+    };
+  }, [socket, activeChannel]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value);
+
+    if (!socket || !isConnected || !activeWorkspace) return;
+
+    // Trigger typing_start if not already in typing state
+    if (!isTypingRef.current) {
+      isTypingRef.current = true;
+      socket.emit('typing_start', {
+        workspaceId: activeWorkspace.id,
+        channel: activeChannel,
+      });
+    }
+
+    // Reset fallback typing stop debouncer
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      if (isTypingRef.current) {
+        isTypingRef.current = false;
+        socket.emit('typing_stop', {
+          workspaceId: activeWorkspace.id,
+          channel: activeChannel,
+        });
+      }
+    }, 3000);
+  };
 
   // Track active room in socket context whenever active workspace or channel switches
   useEffect(() => {
@@ -194,6 +288,18 @@ export default function Dashboard() {
     setMessages(prev => [...prev, optimisticMsg]);
     setNewMessage('');
 
+    // Clear typing indicators immediately
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    if (socket && isConnected && isTypingRef.current && activeWorkspace) {
+      isTypingRef.current = false;
+      socket.emit('typing_stop', {
+        workspaceId: activeWorkspace.id,
+        channel: activeChannel,
+      });
+    }
+
     try {
       if (socket && isConnected) {
         // 2. Emit send_message via websocket
@@ -237,6 +343,18 @@ export default function Dashboard() {
     setMessages(prev =>
       prev.map(m => (m.id === failedMsg.id ? { ...m, status: 'sending' } : m))
     );
+
+    // Stop typing state immediately on retry attempt
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    if (socket && isConnected && isTypingRef.current) {
+      isTypingRef.current = false;
+      socket.emit('typing_stop', {
+        workspaceId: wsId,
+        channel: activeChannel,
+      });
+    }
 
     try {
       if (socket && isConnected) {
@@ -578,7 +696,15 @@ export default function Dashboard() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline gap-2">
-                        <span className="text-xs font-semibold text-slate-900">{msg.senderId?.name || 'Unknown'}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-semibold text-slate-900">{msg.senderId?.name || 'Unknown'}</span>
+                          {onlineUsers.has(msg.senderId?.id) && (
+                            <span 
+                              className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block shrink-0 animate-pulse" 
+                              title="Online"
+                            />
+                          )}
+                        </div>
                         <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
                           msg.senderId?.role === 'admin'
                             ? 'bg-red-500/10 text-red-500'
@@ -620,6 +746,16 @@ export default function Dashboard() {
 
           {/* Message Input Box */}
           <div className="p-4 bg-white border-t border-slate-200">
+            {typingUsers.length > 0 && (
+              <div className="px-1 pb-2 text-[10px] text-slate-500 font-medium italic animate-pulse flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0" />
+                <span>
+                  {typingUsers.length === 1 && `${typingUsers[0]} is typing...`}
+                  {typingUsers.length === 2 && `${typingUsers[0]} and ${typingUsers[1]} are typing...`}
+                  {typingUsers.length > 2 && `Several people are typing...`}
+                </span>
+              </div>
+            )}
             <form onSubmit={handleSendMessage} className="relative flex items-center bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus-within:ring-2 focus-within:ring-violet-500/10 focus-within:border-violet-500 transition-all duration-200">
               <button type="button" className="p-1 text-slate-400 hover:text-slate-650 mr-2 transition-colors">
                 <Paperclip className="w-5 h-5" />
@@ -627,7 +763,7 @@ export default function Dashboard() {
               <input
                 type="text"
                 value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
+                onChange={handleInputChange}
                 placeholder={`Message #${activeChannel}...`}
                 className="w-full bg-transparent focus:outline-none text-sm text-slate-800 placeholder-slate-400 pr-10"
               />

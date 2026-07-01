@@ -6,7 +6,9 @@ import { env } from './config/env';
 import { userRepository } from './models/user.model';
 import { WorkspaceModel } from './models/workspace.model';
 import { MessageModel } from './models/message.model';
-import { joinChannelSchema, sendMessageSchema } from './types/socket.validators';
+import { redisClient, isRedisConnected } from './config/redis';
+import { inMemoryOnlineUsers } from './controllers/presence.controller';
+import { joinChannelSchema, sendMessageSchema, typingIndicatorSchema } from './types/socket.validators';
 import {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -75,8 +77,37 @@ export function initSocketServer(httpServer: http.Server): SocketIOServer<
     }
   });
 
-  io.on('connection', (socket) => {
+  io.on('connection', async (socket) => {
     console.log(`🔌 [Socket] Client connected: ${socket.id} (User: ${socket.data.username})`);
+
+    const userIdStr = socket.data.userId;
+
+    try {
+      // 1. Add user ID to online presence store
+      if (redisClient && isRedisConnected) {
+        await redisClient.sadd('online_users', userIdStr);
+      } else {
+        inMemoryOnlineUsers.add(userIdStr);
+      }
+
+      // 2. Fetch all workspaces this user is member of
+      const userWorkspaces = await WorkspaceModel.find({ members: userIdStr }).exec();
+      
+      // 3. Join presence room for each workspace and broadcast online status to other workspace members
+      for (const workspace of userWorkspaces) {
+        const presenceRoom = `workspace:${workspace.id}:presence`;
+        await socket.join(presenceRoom);
+        
+        // Notify other sockets in the workspace presence room
+        socket.to(presenceRoom).emit('user_presence', {
+          userId: userIdStr,
+          username: socket.data.username,
+          status: 'online',
+        });
+      }
+    } catch (presenceErr) {
+      console.error('❌ [Socket Connection Presence] Error handling user online connection:', presenceErr);
+    }
 
     // 1. Join Channel Room Handler
     socket.on('join_channel', async (payload) => {
@@ -196,9 +227,82 @@ export function initSocketServer(httpServer: http.Server): SocketIOServer<
       }
     });
 
-    // Track when client disconnects
-    socket.on('disconnect', (reason) => {
+    // 4. Typing Start Event Handler
+    socket.on('typing_start', async (payload) => {
+      try {
+        const parseResult = typingIndicatorSchema.safeParse(payload);
+        if (!parseResult.success) return;
+
+        const { workspaceId, channel } = parseResult.data;
+        const roomName = `workspace:${workspaceId}:channel:${channel}`;
+        
+        // Broadcast typing indicator to other room members
+        socket.to(roomName).emit('user_typing', {
+          username: socket.data.username,
+          channel,
+          isTyping: true,
+        });
+      } catch (err) {
+        console.error('❌ [Socket Typing Start] Unexpected error:', err);
+      }
+    });
+
+    // 5. Typing Stop Event Handler
+    socket.on('typing_stop', async (payload) => {
+      try {
+        const parseResult = typingIndicatorSchema.safeParse(payload);
+        if (!parseResult.success) return;
+
+        const { workspaceId, channel } = parseResult.data;
+        const roomName = `workspace:${workspaceId}:channel:${channel}`;
+        
+        socket.to(roomName).emit('user_typing', {
+          username: socket.data.username,
+          channel,
+          isTyping: false,
+        });
+      } catch (err) {
+        console.error('❌ [Socket Typing Stop] Unexpected error:', err);
+      }
+    });
+
+    // Track when client disconnects with multi-tab offline presence check
+    socket.on('disconnect', async (reason) => {
       console.log(`🔌 [Socket] Client disconnected: ${socket.id} (User: ${socket.data.username}, Reason: ${reason})`);
+
+      const userIdStr = socket.data.userId;
+
+      try {
+        // Query active namespace socket connections to check if this user has any other active tabs open
+        const allActiveSockets = await io.fetchSockets();
+        const hasOtherTabsOpen = allActiveSockets.some(
+          (s) => s.data.userId === userIdStr && s.id !== socket.id
+        );
+
+        if (!hasOtherTabsOpen) {
+          console.log(`🌐 [Socket Presence] Marking user ${socket.data.username} offline (last tab closed)`);
+          
+          // Remove from online store
+          if (redisClient && isRedisConnected) {
+            await redisClient.srem('online_users', userIdStr);
+          } else {
+            inMemoryOnlineUsers.delete(userIdStr);
+          }
+
+          // Broadcast offline event to all their workspaces
+          const userWorkspaces = await WorkspaceModel.find({ members: userIdStr }).exec();
+          for (const workspace of userWorkspaces) {
+            const presenceRoom = `workspace:${workspace.id}:presence`;
+            io.to(presenceRoom).emit('user_presence', {
+              userId: userIdStr,
+              username: socket.data.username,
+              status: 'offline',
+            });
+          }
+        }
+      } catch (discErr) {
+        console.error('❌ [Socket Disconnect Presence] Error handling user offline status:', discErr);
+      }
     });
   });
 
