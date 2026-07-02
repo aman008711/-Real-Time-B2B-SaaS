@@ -266,6 +266,25 @@ export function initSocketServer(httpServer: http.Server): SocketIOServer<
       }
     });
 
+    // Clear typing indicators when socket is disconnecting (before rooms are destroyed)
+    socket.on('disconnecting', () => {
+      try {
+        for (const roomName of socket.rooms) {
+          if (roomName.startsWith('workspace:') && roomName.includes(':channel:')) {
+            const parts = roomName.split(':');
+            const channel = parts[parts.length - 1];
+            socket.to(roomName).emit('user_typing', {
+              username: socket.data.username,
+              channel,
+              isTyping: false,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('❌ [Socket Disconnecting Typing Cleanup] Unexpected error:', err);
+      }
+    });
+
     // Track when client disconnects with multi-tab offline presence check
     socket.on('disconnect', async (reason) => {
       console.log(`🔌 [Socket] Client disconnected: ${socket.id} (User: ${socket.data.username}, Reason: ${reason})`);
