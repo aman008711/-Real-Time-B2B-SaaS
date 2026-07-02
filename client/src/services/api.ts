@@ -18,7 +18,7 @@ export interface Workspace {
   name: string;
   description?: string;
   ownerId: string;
-  members: string[];
+  members: User[];
   channels: string[];
   invitedEmails?: string[];
   createdAt: string;

@@ -47,6 +47,7 @@ export default function Dashboard() {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<any>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     async function initDashboard() {
@@ -97,6 +98,11 @@ export default function Dashboard() {
   useEffect(() => {
     setTypingUsers([]);
   }, [activeChannel]);
+
+  // Auto-focus input box on channel or workspace switch
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, [activeChannel, activeWorkspace]);
 
   // Fetch initial online user IDs
   useEffect(() => {
@@ -557,7 +563,7 @@ export default function Dashboard() {
             </ul>
 
             {/* Invite Member Action */}
-            <div className="px-1.5">
+            <div className="px-1.5 mb-2">
               <button 
                 onClick={() => { setInviteEmail(''); setIsInvitingMember(true); }}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-slate-300 hover:border-violet-500 rounded-lg text-xs text-slate-600 hover:text-violet-650 hover:bg-violet-50/20 transition-all font-medium"
@@ -565,6 +571,34 @@ export default function Dashboard() {
                 <Users className="w-3.5 h-3.5 text-slate-450" />
                 <span>Invite Member</span>
               </button>
+            </div>
+
+            {/* Members list */}
+            <div className="border-t border-slate-200/60 pt-4 mt-2">
+              <span className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Members</span>
+              <ul className="space-y-0.5 max-h-48 overflow-y-auto px-1.5">
+                {(activeWorkspace?.members || []).map((member) => (
+                  <li key={member.id}>
+                    <div className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-slate-655 hover:bg-slate-200/20">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-5 h-5 rounded-md bg-linear-to-tr from-violet-650/15 to-indigo-655/15 flex items-center justify-center text-[10px] font-bold text-violet-650 shrink-0">
+                          {member.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="truncate">{member.name} {member.id === user?.id && '(You)'}</span>
+                      </div>
+                      {/* Status Dot */}
+                      <span 
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          onlineUsers.has(member.id)
+                            ? 'bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.45)]'
+                            : 'bg-slate-300'
+                        }`}
+                        title={onlineUsers.has(member.id) ? 'Online' : 'Offline'}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
 
@@ -761,6 +795,7 @@ export default function Dashboard() {
                 <Paperclip className="w-5 h-5" />
               </button>
               <input
+                ref={inputRef}
                 type="text"
                 value={newMessage}
                 onChange={handleInputChange}
