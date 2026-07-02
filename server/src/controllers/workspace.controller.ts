@@ -50,7 +50,8 @@ export async function createWorkspace(req: AuthenticatedRequest, res: Response):
     });
 
     await workspace.save();
-    res.status(201).json(workspace);
+    const populated = await workspace.populate('members');
+    res.status(201).json(populated);
   } catch (error: any) {
     console.error('Create workspace error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -65,7 +66,7 @@ export async function getWorkspaces(req: AuthenticatedRequest, res: Response): P
     }
 
     const userId = new mongoose.Types.ObjectId(req.user.id);
-    const workspaces = await WorkspaceModel.find({ members: userId }).exec();
+    const workspaces = await WorkspaceModel.find({ members: userId }).populate('members').exec();
     res.status(200).json(workspaces);
   } catch (error: any) {
     console.error('Get workspaces error:', error);
@@ -117,7 +118,7 @@ export async function addChannel(req: AuthenticatedRequest, res: Response): Prom
     workspace.channels.push(channelName);
     await workspace.save();
 
-    res.status(200).json(workspace);
+    res.status(200).json(await workspace.populate('members'));
   } catch (error: any) {
     console.error('Add channel error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -180,6 +181,8 @@ export async function inviteMember(req: AuthenticatedRequest, res: Response): Pr
       // Dispatch invitation email asynchronously (runs in background)
       sendInviteEmail(invitedUser.email, inviterName, workspace.name);
 
+      const populated = await workspace.populate('members');
+
       res.status(200).json({
         message: 'Member invited successfully',
         user: {
@@ -188,7 +191,7 @@ export async function inviteMember(req: AuthenticatedRequest, res: Response): Pr
           email: invitedUser.email,
           role: invitedUser.role,
         },
-        workspace
+        workspace: populated
       });
     } else {
       // Unregistered user invite
@@ -210,7 +213,7 @@ export async function inviteMember(req: AuthenticatedRequest, res: Response): Pr
         message: isAlreadyInvited
           ? 'Invitation email re-sent successfully to unregistered user'
           : 'Invitation email sent successfully to unregistered user',
-        workspace
+        workspace: await workspace.populate('members')
       });
     }
   } catch (error: any) {
