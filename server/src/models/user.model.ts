@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { redisClient, isRedisConnected } from '../config/redis';
 
 export interface IUser extends Document {
   id: string;
@@ -50,7 +51,36 @@ class MongoUserRepository implements IUserRepository {
 
   async findById(id: string): Promise<IUser | null> {
     if (!mongoose.Types.ObjectId.isValid(id)) return null;
-    return UserModel.findById(id).exec();
+
+    const cacheKey = `user:profile:${id}`;
+
+    try {
+      if (redisClient && isRedisConnected) {
+        const cached = await redisClient.get(cacheKey);
+        if (cached) {
+          console.log(`💾 [Redis Cache] Hit for user: ${id}`);
+          const raw = JSON.parse(cached);
+          return UserModel.hydrate(raw);
+        }
+      }
+    } catch (err: any) {
+      console.error(`⚠️ [Redis Cache] Failed to read user cache for ${id}:`, err.message);
+    }
+
+    const user = await UserModel.findById(id).exec();
+
+    if (user) {
+      try {
+        if (redisClient && isRedisConnected) {
+          console.log(`💾 [Redis Cache] Miss. Caching profile for user: ${id}`);
+          await redisClient.set(cacheKey, JSON.stringify(user.toObject()), 'EX', 3600); // Expires in 1 hour (3600s)
+        }
+      } catch (err: any) {
+        console.error(`⚠️ [Redis Cache] Failed to write user cache for ${id}:`, err.message);
+      }
+    }
+
+    return user;
   }
 
   async create(input: CreateUserInput): Promise<IUser> {
