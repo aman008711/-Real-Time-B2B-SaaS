@@ -119,3 +119,9 @@ Workspace navigation, channel selection, and messages rendering were successfull
 2. **Channel-Based Messaging**: Message routing, persistence in MongoDB, and population of sender details are active for default channels (`#general`, `#engineering-sync`, `#design-assets`). Access is protected to ensure only workspace members can read/write messages.
 3. **User Profile Display**: Integrated clean serialization (using `.toJSON()`) in the auth controller to reliably display the authenticated user's name, role, and avatar initials in the sidebar footer.
 4. **Logout UX Styling**: Redesigned the logout button to utilize a warning-red interface (`bg-red-50 text-red-500 hover:bg-red-100/80`) for enhanced visual affordance.
+
+### Week 3 Flow Verification (Real-Time & Caching Layer)
+Websocket messaging pipelines, online/offline presence tracking, typing indicators, and session caches were successfully verified:
+1. **Socket.IO Real-Time Messaging**: Implemented real-time message broadcasting and room isolation mapping client clicks instantly to room joins (`join_channel` / `leave_channel`). Configured fallback REST APIs and timeouts to mark message errors with a clickable retry utility.
+2. **Online Presence & Typing Indicators**: Added real-time user typing indicators (debounced to 3 seconds with disconnect cleanups) and multi-tab resilient online status indicators. Workspace members are displayed in a dedicated sidebar list with pulsing green online dots.
+3. **Redis Caching Layer**: Installed `ioredis` and implemented a resilient session caching decorator inside the repository `findById` method. Profile fetches are intercepted: hits are served from Redis and hydrated into Mongoose Documents (saving database queries), while cache misses write back to Redis (1-hour TTL). Bootup remains fully crash-proof if Redis is offline.

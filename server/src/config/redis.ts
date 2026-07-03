@@ -7,7 +7,7 @@ let isRedisConnected = false;
 try {
   console.log(`🔌 [Redis] Initializing client... Target: ${env.REDIS_URI}`);
   redisClient = new Redis(env.REDIS_URI, {
-    maxRetriesPerRequest: 1, // Fail fast on requests when down to prevent API hangs
+    maxRetriesPerRequest: null,
     retryStrategy(times) {
       if (times > 3) {
         console.warn('⚠️ [Redis] Reached max connection retries (3). Running in fallback in-memory mode.');

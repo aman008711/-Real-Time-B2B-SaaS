@@ -1,4 +1,5 @@
 import { Server as SocketIOServer } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
 import http from 'http';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
@@ -34,6 +35,36 @@ export function initSocketServer(httpServer: http.Server): SocketIOServer<
       credentials: true,
     },
   });
+
+  // 1. Setup Redis Adapter for multi-instance scaling if Redis is connected
+  if (redisClient) {
+    try {
+      console.log('🔌 [Socket Redis Adapter] Initializing Redis scaling adapter...');
+      const pubClient = redisClient;
+      const subClient = pubClient.duplicate();
+
+      subClient.on('error', (err: any) => {
+        console.error('❌ [Socket Redis Adapter Sub] Connection error:', err.message);
+      });
+
+      const mountAdapter = () => {
+        if (pubClient.status === 'ready' && subClient.status === 'ready') {
+          io.adapter(createAdapter(pubClient, subClient));
+          console.log('✅ [Socket Redis Adapter] Adapter successfully mounted on Socket.IO.');
+        }
+      };
+
+      pubClient.on('ready', mountAdapter);
+      subClient.on('ready', mountAdapter);
+
+      // Try mounting immediately in case they are already connected
+      mountAdapter();
+    } catch (err: any) {
+      console.error('❌ [Socket Redis Adapter] Mounting initialization failed:', err.message);
+    }
+  } else {
+    console.log('⚠️ [Socket Redis Adapter] Redis is not configured. Falling back to default in-memory adapter.');
+  }
 
   // Socket.IO Connection Authentication Middleware
   io.use(async (socket, next) => {
