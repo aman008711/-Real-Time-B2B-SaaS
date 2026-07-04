@@ -66,6 +66,20 @@ export function initSocketServer(httpServer: http.Server): SocketIOServer<
     console.log('⚠️ [Socket Redis Adapter] Redis is not configured. Falling back to default in-memory adapter.');
   }
 
+  // 2. Clear out any leftover online presence caches from previous crashes/restarts
+  inMemoryOnlineUsers.clear();
+  if (redisClient) {
+    const client = redisClient;
+    client.on('ready', async () => {
+      try {
+        console.log('🧹 [Redis Presence] Flushing stale online presence cache (ready).');
+        await client.del('online_users');
+      } catch (err: any) {
+        console.error('❌ [Redis Presence] Failed to flush online users cache:', err.message);
+      }
+    });
+  }
+
   // Socket.IO Connection Authentication Middleware
   io.use(async (socket, next) => {
     try {
