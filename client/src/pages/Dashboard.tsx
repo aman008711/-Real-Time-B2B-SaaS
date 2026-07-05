@@ -58,6 +58,19 @@ export default function Dashboard() {
   const [newThreadReply, setNewThreadReply] = useState('');
   const threadRepliesEndRef = useRef<HTMLDivElement | null>(null);
 
+  // Message Syncing Ref
+  const lastMessageTimeRef = useRef<string | null>(null);
+
+  // Keep lastMessageTimeRef updated with the newest parent message timestamp
+  useEffect(() => {
+    const validMessages = messages.filter((m) => m.status !== 'sending' && m.status !== 'error');
+    if (validMessages.length > 0) {
+      lastMessageTimeRef.current = validMessages[validMessages.length - 1].createdAt;
+    } else {
+      lastMessageTimeRef.current = null;
+    }
+  }, [messages]);
+
   useEffect(() => {
     async function initDashboard() {
       try {
@@ -211,6 +224,18 @@ export default function Dashboard() {
     setActiveRoom({ workspaceId: activeWorkspace.id, channel: activeChannel });
   }, [activeWorkspace, activeChannel, setActiveRoom]);
 
+  // Trigger missed message reconciliation on socket reconnection
+  useEffect(() => {
+    if (isConnected && socket && activeWorkspace && lastMessageTimeRef.current) {
+      socket.emit('sync_messages', {
+        workspaceId: activeWorkspace.id,
+        channel: activeChannel,
+        lastMessageCreatedAt: lastMessageTimeRef.current,
+      });
+      console.log(`🔌 [Socket Sync] Requesting missed messages since ${lastMessageTimeRef.current}`);
+    }
+  }, [isConnected, socket, activeWorkspace, activeChannel]);
+
   // Handle incoming real-time Socket.IO messages
   useEffect(() => {
     if (!socket) return;
@@ -299,12 +324,52 @@ export default function Dashboard() {
       );
     };
 
+    const handleMissedMessages = (payload: { channel: string; messages: any[] }) => {
+      if (payload.channel === activeChannel) {
+        setMessages((prev) => {
+          // Map payloads to Message interfaces
+          const newMsgs: Message[] = payload.messages.map((msgPayload) => ({
+            id: msgPayload.id,
+            workspaceId: msgPayload.workspaceId,
+            channel: msgPayload.channel,
+            text: msgPayload.text,
+            parentMessageId: msgPayload.parentMessageId,
+            reactions: msgPayload.reactions || [],
+            createdAt: msgPayload.createdAt,
+            senderId: {
+              id: msgPayload.sender.id,
+              name: msgPayload.sender.username,
+              email: msgPayload.sender.email,
+              role: msgPayload.sender.role,
+            },
+          }));
+
+          // Merge lists while filtering out duplicates
+          const updated = [...prev];
+          let updatedCount = 0;
+          for (const msg of newMsgs) {
+            if (!updated.some((m) => m.id === msg.id)) {
+              updated.push(msg);
+              updatedCount++;
+            }
+          }
+          if (updatedCount > 0) {
+            // Sort by creation time to ensure correct ordering
+            return updated.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+          }
+          return prev;
+        });
+      }
+    };
+
     socket.on('message_received', handleMessageReceived);
     socket.on('reaction_updated', handleReactionUpdated);
+    socket.on('missed_messages', handleMissedMessages);
 
     return () => {
       socket.off('message_received', handleMessageReceived);
       socket.off('reaction_updated', handleReactionUpdated);
+      socket.off('missed_messages', handleMissedMessages);
     };
   }, [socket, activeWorkspace, activeChannel, activeThreadMessage]);
 
