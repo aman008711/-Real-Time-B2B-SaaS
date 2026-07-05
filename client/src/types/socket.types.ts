@@ -7,11 +7,19 @@ export interface SendMessagePayload {
   workspaceId: string;
   channel: string;
   text: string;
+  parentMessageId?: string;
 }
 
 export interface TypingIndicatorPayload {
   workspaceId: string;
   channel: string;
+}
+
+export interface ToggleReactionPayload {
+  workspaceId: string;
+  channel: string;
+  messageId: string;
+  emoji: string;
 }
 
 export interface MessagePayload {
@@ -20,6 +28,8 @@ export interface MessagePayload {
   channel: string;
   text: string;
   senderId: string;
+  parentMessageId?: string;
+  reactions?: { emoji: string; users: string[] }[];
   createdAt: string;
   sender: {
     id: string;
@@ -35,12 +45,14 @@ export interface ClientToServerEvents {
   send_message: (payload: SendMessagePayload) => void;
   typing_start: (payload: TypingIndicatorPayload) => void;
   typing_stop: (payload: TypingIndicatorPayload) => void;
+  toggle_reaction: (payload: ToggleReactionPayload) => void;
 }
 
 export interface ServerToClientEvents {
   message_received: (message: MessagePayload) => void;
   user_typing: (payload: { username: string; channel: string; isTyping: boolean }) => void;
   user_presence: (payload: { userId: string; username: string; status: 'online' | 'offline' }) => void;
+  reaction_updated: (payload: { messageId: string; reactions: { emoji: string; users: string[] }[] }) => void;
 }
 
 export interface InterServerEvents {

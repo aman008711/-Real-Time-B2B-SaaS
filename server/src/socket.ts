@@ -9,7 +9,7 @@ import { WorkspaceModel } from './models/workspace.model';
 import { MessageModel } from './models/message.model';
 import { redisClient, isRedisConnected } from './config/redis';
 import { inMemoryOnlineUsers } from './controllers/presence.controller';
-import { joinChannelSchema, sendMessageSchema, typingIndicatorSchema } from './types/socket.validators';
+import { joinChannelSchema, sendMessageSchema, typingIndicatorSchema, toggleReactionSchema } from './types/socket.validators';
 import {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -215,7 +215,7 @@ export function initSocketServer(httpServer: http.Server): SocketIOServer<
           return;
         }
 
-        const { workspaceId, channel, text } = parseResult.data;
+        const { workspaceId, channel, text, parentMessageId } = parseResult.data;
         const userIdStr = socket.data.userId;
 
         // Verify workspace exists in DB
@@ -244,6 +244,8 @@ export function initSocketServer(httpServer: http.Server): SocketIOServer<
           channel,
           senderId: new mongoose.Types.ObjectId(userIdStr),
           text,
+          parentMessageId: parentMessageId ? new mongoose.Types.ObjectId(parentMessageId) : null,
+          reactions: []
         });
         await message.save();
 
@@ -255,6 +257,8 @@ export function initSocketServer(httpServer: http.Server): SocketIOServer<
           channel,
           text,
           senderId: userIdStr,
+          parentMessageId: parentMessageId || undefined,
+          reactions: [],
           createdAt: message.createdAt.toISOString(),
           sender: {
             id: userIdStr,
@@ -308,6 +312,64 @@ export function initSocketServer(httpServer: http.Server): SocketIOServer<
         });
       } catch (err) {
         console.error('❌ [Socket Typing Stop] Unexpected error:', err);
+      }
+    });
+
+    // 5. Toggle Reaction Event Handler
+    socket.on('toggle_reaction', async (payload) => {
+      try {
+        const parseResult = toggleReactionSchema.safeParse(payload);
+        if (!parseResult.success) {
+          console.warn('⚠️ [Socket Reaction] Validation failed:', parseResult.error.errors[0].message);
+          return;
+        }
+
+        const { workspaceId, channel, messageId, emoji } = parseResult.data;
+        const userIdStr = socket.data.userId;
+        const userId = new mongoose.Types.ObjectId(userIdStr);
+
+        const message = await MessageModel.findById(messageId).exec();
+        if (!message) {
+          console.warn(`⚠️ [Socket Reaction] Message ${messageId} not found`);
+          return;
+        }
+
+        // Find if emoji already has reactions
+        const reactionIndex = message.reactions.findIndex((r) => r.emoji === emoji);
+        if (reactionIndex > -1) {
+          const users = message.reactions[reactionIndex].users;
+          const userIndex = users.findIndex((uid) => uid.equals(userId));
+          if (userIndex > -1) {
+            // Remove user from reaction
+            users.splice(userIndex, 1);
+            if (users.length === 0) {
+              message.reactions.splice(reactionIndex, 1);
+            }
+          } else {
+            // Add user to reaction
+            users.push(userId);
+          }
+        } else {
+          // Create new reaction entry
+          message.reactions.push({ emoji, users: [userId] });
+        }
+
+        await message.save();
+
+        // Broadcast reaction update to all clients in the room (including sender)
+        const roomName = `workspace:${workspaceId}:channel:${channel}`;
+        const updatedReactions = message.reactions.map((r) => ({
+          emoji: r.emoji,
+          users: r.users.map((u) => u.toString()),
+        }));
+
+        io.to(roomName).emit('reaction_updated', {
+          messageId,
+          reactions: updatedReactions,
+        });
+        console.log(`📡 [Socket Reaction] ${socket.data.username} toggled reaction ${emoji} on message ${messageId}`);
+      } catch (err) {
+        console.error('❌ [Socket Reaction] Unexpected error:', err);
       }
     });
 

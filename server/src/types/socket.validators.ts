@@ -17,6 +17,9 @@ export const sendMessageSchema = z.object({
   workspaceId: objectIdSchema,
   channel: z.string().min(1, 'Channel name is required').trim().toLowerCase(),
   text: z.string().min(1, 'Message text cannot be empty').max(2000, 'Message cannot exceed 2000 characters').trim(),
+  parentMessageId: z.string().refine((val) => mongoose.Types.ObjectId.isValid(val), {
+    message: 'Invalid Mongoose ObjectId',
+  }).optional(),
 });
 
 // 3. Schema for typing indicators (typing_start / typing_stop)
@@ -25,7 +28,16 @@ export const typingIndicatorSchema = z.object({
   channel: z.string().min(1, 'Channel name is required').trim().toLowerCase(),
 });
 
+// 4. Schema for toggling reactions
+export const toggleReactionSchema = z.object({
+  workspaceId: objectIdSchema,
+  channel: z.string().min(1, 'Channel name is required').trim().toLowerCase(),
+  messageId: objectIdSchema,
+  emoji: z.string().min(1, 'Emoji is required').trim(),
+});
+
 // Derive and export TypeScript interfaces from the Zod schemas
 export type JoinChannelPayload = z.infer<typeof joinChannelSchema>;
 export type SendMessagePayload = z.infer<typeof sendMessageSchema>;
 export type TypingIndicatorPayload = z.infer<typeof typingIndicatorSchema>;
+export type ToggleReactionPayload = z.infer<typeof toggleReactionSchema>;
