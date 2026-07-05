@@ -13,7 +13,9 @@ import {
   Bell,
   Layers,
   Send,
-  Paperclip
+  Paperclip,
+  MessageSquare,
+  X
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -48,6 +50,13 @@ export default function Dashboard() {
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<any>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Active Threading State
+  const [activeThreadMessage, setActiveThreadMessage] = useState<Message | null>(null);
+  const [threadReplies, setThreadReplies] = useState<Message[]>([]);
+  const [threadRepliesLoading, setThreadRepliesLoading] = useState(false);
+  const [newThreadReply, setNewThreadReply] = useState('');
+  const threadRepliesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     async function initDashboard() {
@@ -97,7 +106,13 @@ export default function Dashboard() {
   // Reset typing indicators list when active channel changes
   useEffect(() => {
     setTypingUsers([]);
+    setActiveThreadMessage(null);
   }, [activeChannel]);
+
+  // Auto-scroll thread panel when new replies are added
+  useEffect(() => {
+    threadRepliesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [threadReplies]);
 
   // Auto-focus input box on channel or workspace switch
   useEffect(() => {
@@ -213,6 +228,8 @@ export default function Dashboard() {
           workspaceId: msgPayload.workspaceId,
           channel: msgPayload.channel,
           text: msgPayload.text,
+          parentMessageId: msgPayload.parentMessageId,
+          reactions: msgPayload.reactions || [],
           createdAt: msgPayload.createdAt,
           senderId: {
             id: msgPayload.sender.id,
@@ -222,32 +239,74 @@ export default function Dashboard() {
           },
         };
 
-        setMessages((prev) => {
-          // If we find an optimistic message (sending status & matching text), replace it
-          const optimisticIndex = prev.findIndex(
-            (m) => m.status === 'sending' && m.text === msg.text
+        if (msg.parentMessageId) {
+          // Increment replyCount for parent message locally if found
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === msg.parentMessageId
+                ? { ...m, replyCount: (m.replyCount || 0) + 1 }
+                : m
+            )
           );
-          if (optimisticIndex !== -1) {
-            const updated = [...prev];
-            updated[optimisticIndex] = msg;
-            return updated;
-          }
 
-          // Avoid duplicates (e.g. if we fetched REST API simultaneously)
-          if (prev.some((m) => m.id === msg.id)) {
-            return prev;
+          // Append to thread replies list if currently open
+          if (activeThreadMessage && activeThreadMessage.id === msg.parentMessageId) {
+            setThreadReplies((prev) => {
+              if (prev.some((m) => m.id === msg.id)) return prev;
+              return [...prev, msg];
+            });
           }
-          return [...prev, msg];
-        });
+        } else {
+          setMessages((prev) => {
+            // If we find an optimistic message (sending status & matching text), replace it
+            const optimisticIndex = prev.findIndex(
+              (m) => m.status === 'sending' && m.text === msg.text
+            );
+            if (optimisticIndex !== -1) {
+              const updated = [...prev];
+              updated[optimisticIndex] = msg;
+              return updated;
+            }
+
+            // Avoid duplicates
+            if (prev.some((m) => m.id === msg.id)) {
+              return prev;
+            }
+            return [...prev, msg];
+          });
+        }
       }
     };
 
+    const handleReactionUpdated = (payload: { messageId: string; reactions: { emoji: string; users: string[] }[] }) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === payload.messageId ? { ...m, reactions: payload.reactions } : m
+        )
+      );
+
+      setActiveThreadMessage((prev) => {
+        if (prev && prev.id === payload.messageId) {
+          return { ...prev, reactions: payload.reactions };
+        }
+        return prev;
+      });
+
+      setThreadReplies((prev) =>
+        prev.map((m) =>
+          m.id === payload.messageId ? { ...m, reactions: payload.reactions } : m
+        )
+      );
+    };
+
     socket.on('message_received', handleMessageReceived);
+    socket.on('reaction_updated', handleReactionUpdated);
 
     return () => {
       socket.off('message_received', handleMessageReceived);
+      socket.off('reaction_updated', handleReactionUpdated);
     };
-  }, [socket, activeWorkspace, activeChannel]);
+  }, [socket, activeWorkspace, activeChannel, activeThreadMessage]);
 
   // Fetch messages from MongoDB when workspace or channel changes
   useEffect(() => {
@@ -266,6 +325,48 @@ export default function Dashboard() {
     }
     fetchMessages();
   }, [activeWorkspace, activeChannel]);
+
+  const handleOpenThread = async (msg: Message) => {
+    setActiveThreadMessage(msg);
+    setThreadReplies([]);
+    setThreadRepliesLoading(true);
+    try {
+      const replies = await api.getMessageReplies(msg.id);
+      setThreadReplies(replies);
+    } catch (err) {
+      console.error('Failed to load thread replies:', err);
+      toast.error('Failed to load comments');
+    } finally {
+      setThreadRepliesLoading(false);
+    }
+  };
+
+  const handleSendThreadReply = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newThreadReply.trim() || !user || !activeWorkspace || !activeThreadMessage) return;
+
+    if (socket && isConnected) {
+      socket.emit('send_message', {
+        workspaceId: activeWorkspace.id,
+        channel: activeChannel,
+        text: newThreadReply.trim(),
+        parentMessageId: activeThreadMessage.id
+      });
+      setNewThreadReply('');
+    } else {
+      toast.error('Connection offline. Cannot reply.');
+    }
+  };
+
+  const handleToggleReaction = (msgId: string, emoji: string) => {
+    if (!socket || !isConnected || !activeWorkspace) return;
+    socket.emit('toggle_reaction', {
+      workspaceId: activeWorkspace.id,
+      channel: activeChannel,
+      messageId: msgId,
+      emoji
+    });
+  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -721,10 +822,36 @@ export default function Dashboard() {
                 {messages.map(msg => (
                   <div 
                     key={msg.id} 
-                    className={`flex items-start gap-3 hover:bg-slate-100/40 p-2 rounded-xl transition-colors ${
+                    className={`flex items-start gap-3 hover:bg-slate-100/40 p-2.5 rounded-xl transition-all duration-150 group relative ${
                       msg.status === 'sending' ? 'opacity-65' : ''
                     }`}
                   >
+                    {/* Hover Reaction/Reply Options */}
+                    {msg.status !== 'sending' && msg.status !== 'error' && (
+                      <div className="absolute top-2 right-4 hidden group-hover:flex items-center gap-1 bg-white border border-slate-200 shadow-sm rounded-lg p-1.5 z-10 animate-fade-in">
+                        {/* Quick Emojis */}
+                        {['👍', '❤️', '😂', '🔥', '🎉'].map(emoji => (
+                          <button
+                            key={emoji}
+                            onClick={() => handleToggleReaction(msg.id, emoji)}
+                            className="p-1 hover:bg-slate-100 rounded text-base transition-colors cursor-pointer"
+                            type="button"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                        <div className="w-px h-4 bg-slate-200 mx-1" />
+                        <button
+                          onClick={() => handleOpenThread(msg)}
+                          title="Reply in Thread"
+                          className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                          type="button"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
                     <div className="w-9 h-9 rounded-xl bg-linear-to-tr from-violet-600 to-indigo-600 flex items-center justify-center font-bold text-white shrink-0 text-sm shadow-xs">
                       {(msg.senderId?.name || 'U').charAt(0).toUpperCase()}
                     </div>
@@ -769,6 +896,42 @@ export default function Dashboard() {
                       <p className={`text-sm mt-1 wrap-break-word ${
                         msg.status === 'error' ? 'text-red-500/80 line-through' : 'text-slate-700'
                       }`}>{msg.text}</p>
+
+                      {/* Emoji Reactions Pills */}
+                      {msg.reactions && msg.reactions.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {msg.reactions.map((reaction) => {
+                            const hasReacted = user && reaction.users.includes(user.id);
+                            return (
+                              <button
+                                key={reaction.emoji}
+                                onClick={() => handleToggleReaction(msg.id, reaction.emoji)}
+                                className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-medium transition-all cursor-pointer ${
+                                  hasReacted
+                                    ? 'bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100/50 shadow-xs'
+                                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                                }`}
+                                type="button"
+                              >
+                                <span>{reaction.emoji}</span>
+                                <span className="font-semibold">{reaction.users.length}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Thread Replies Link Indicator */}
+                      {msg.replyCount && msg.replyCount > 0 ? (
+                        <button
+                          onClick={() => handleOpenThread(msg)}
+                          className="flex items-center gap-1.5 mt-2 text-[11px] font-bold text-violet-650 hover:text-violet-750 hover:underline bg-transparent cursor-pointer"
+                          type="button"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>{msg.replyCount} {msg.replyCount === 1 ? 'reply' : 'replies'}</span>
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 ))}
@@ -814,6 +977,180 @@ export default function Dashboard() {
 
         </div>
       </main>
+
+      {/* 3. Thread Drawer Panel */}
+      {activeThreadMessage && (
+        <aside className="w-96 border-l border-slate-200 bg-white flex flex-col shrink-0 h-full overflow-hidden shadow-2xl relative z-20">
+          
+          {/* Thread Header */}
+          <div className="h-16 px-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50">
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-slate-800 leading-tight">Thread</h2>
+              <span className="text-[10px] text-slate-500 font-semibold truncate block mt-0.5">
+                #{activeChannel}
+              </span>
+            </div>
+            <button
+              onClick={() => setActiveThreadMessage(null)}
+              className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+              type="button"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Thread Scrollable Content */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            
+            {/* Parent Message Card */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 relative">
+              <div className="flex items-start gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-linear-to-tr from-violet-600 to-indigo-600 flex items-center justify-center font-bold text-white shrink-0 text-xs shadow-xs animate-fade-in">
+                  {(activeThreadMessage.senderId?.name || 'U').charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-xs font-semibold text-slate-900">{activeThreadMessage.senderId?.name}</span>
+                    <span className="text-[9px] text-slate-400">
+                      {new Date(activeThreadMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-700 mt-1 wrap-break-word font-normal">{activeThreadMessage.text}</p>
+                </div>
+              </div>
+              
+              {/* Reactions in parent card */}
+              {activeThreadMessage.reactions && activeThreadMessage.reactions.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2 pl-10">
+                  {activeThreadMessage.reactions.map((reaction) => {
+                    const hasReacted = user && reaction.users.includes(user.id);
+                    return (
+                      <button
+                        key={reaction.emoji}
+                        onClick={() => handleToggleReaction(activeThreadMessage.id, reaction.emoji)}
+                        className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium transition-all cursor-pointer ${
+                          hasReacted
+                            ? 'bg-violet-50 border-violet-200 text-violet-700 shadow-xs animate-fade-in'
+                            : 'bg-white border-slate-200 text-slate-500'
+                        }`}
+                        type="button"
+                      >
+                        <span>{reaction.emoji}</span>
+                        <span>{reaction.users.length}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="w-full h-px bg-slate-100 my-2" />
+
+            {/* Replies section */}
+            <div className="space-y-3">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block px-1">Replies</span>
+              
+              {threadRepliesLoading ? (
+                <div className="space-y-4 animate-pulse">
+                  {[1, 2].map((n) => (
+                    <div key={n} className="flex items-start gap-2.5 p-2">
+                      <div className="w-8 h-8 rounded-lg bg-slate-200 shrink-0" />
+                      <div className="flex-1 space-y-1.5 mt-0.5">
+                        <div className="h-3 bg-slate-200 rounded w-20" />
+                        <div className="h-2.5 bg-slate-200 rounded w-full" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : threadReplies.length === 0 ? (
+                <div className="text-center py-6 text-slate-400 text-xs">
+                  No replies yet. Be the first to reply!
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {threadReplies.map((reply) => (
+                    <div key={reply.id} className="flex items-start gap-2.5 hover:bg-slate-50/50 p-2 rounded-xl group relative">
+                      
+                      {/* Reply Hover Reactions */}
+                      <div className="absolute top-1 right-2 hidden group-hover:flex items-center gap-0.5 bg-white border border-slate-200 shadow-xs rounded-md p-1 z-10">
+                        {['👍', '❤️', '😂'].map(emoji => (
+                          <button
+                            key={emoji}
+                            onClick={() => handleToggleReaction(reply.id, emoji)}
+                            className="p-0.5 hover:bg-slate-100 rounded text-sm transition-colors cursor-pointer"
+                            type="button"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="w-8 h-8 rounded-lg bg-linear-to-tr from-violet-600/70 to-indigo-650/70 flex items-center justify-center font-bold text-white shrink-0 text-xs shadow-xs">
+                        {(reply.senderId?.name || 'U').charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-xs font-semibold text-slate-900">{reply.senderId?.name}</span>
+                          <span className="text-[9px] text-slate-400">
+                            {new Date(reply.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-700 mt-1 wrap-break-word">{reply.text}</p>
+                        
+                        {/* Reply Reactions pills */}
+                        {reply.reactions && reply.reactions.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {reply.reactions.map((reaction) => {
+                              const hasReacted = user && reaction.users.includes(user.id);
+                              return (
+                                <button
+                                  key={reaction.emoji}
+                                  onClick={() => handleToggleReaction(reply.id, reaction.emoji)}
+                                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[9px] font-medium transition-all cursor-pointer ${
+                                    hasReacted
+                                      ? 'bg-violet-50 border-violet-200 text-violet-700 shadow-xs'
+                                      : 'bg-slate-50 border-slate-200 text-slate-500'
+                                  }`}
+                                  type="button"
+                                >
+                                  <span>{reaction.emoji}</span>
+                                  <span>{reaction.users.length}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div ref={threadRepliesEndRef} />
+          </div>
+
+          {/* Thread Compose Input */}
+          <div className="p-3 border-t border-slate-200 bg-slate-50 shrink-0">
+            <form onSubmit={handleSendThreadReply} className="relative flex items-center bg-white border border-slate-200 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-violet-500/10 focus-within:border-violet-500 transition-all duration-200">
+              <input
+                type="text"
+                value={newThreadReply}
+                onChange={(e) => setNewThreadReply(e.target.value)}
+                placeholder="Reply in thread..."
+                className="w-full bg-transparent focus:outline-none text-xs text-slate-800 placeholder-slate-400 pr-8"
+              />
+              <button
+                type="submit"
+                disabled={!newThreadReply.trim()}
+                className="absolute right-2 p-1 rounded-md bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-30 transition-all duration-200 cursor-pointer"
+              >
+                <Send className="w-3 h-3" />
+              </button>
+            </form>
+          </div>
+        </aside>
+      )}
 
       {/* Workspace Creation Modal */}
       {isCreatingWorkspace && (

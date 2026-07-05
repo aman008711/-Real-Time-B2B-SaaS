@@ -35,6 +35,9 @@ export interface Message {
     email: string;
   };
   text: string;
+  parentMessageId?: string;
+  reactions?: { emoji: string; users: string[] }[];
+  replyCount?: number;
   createdAt: string;
   status?: 'sending' | 'error';
 }
@@ -148,11 +151,15 @@ export const api = {
     return request<Message[]>(`/workspaces/${workspaceId}/messages?channel=${encodeURIComponent(channel)}`);
   },
 
-  async sendMessage(workspaceId: string, channel: string, text: string): Promise<Message> {
+  async sendMessage(workspaceId: string, channel: string, text: string, parentMessageId?: string): Promise<Message> {
     return request<Message>(`/workspaces/${workspaceId}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ channel, text }),
+      body: JSON.stringify({ channel, text, parentMessageId }),
     });
+  },
+
+  async getMessageReplies(messageId: string): Promise<Message[]> {
+    return request<Message[]>(`/workspaces/messages/${messageId}/replies`);
   },
 
   async getOnlineUsers(): Promise<string[]> {
