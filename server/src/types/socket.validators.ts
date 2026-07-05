@@ -36,8 +36,18 @@ export const toggleReactionSchema = z.object({
   emoji: z.string().min(1, 'Emoji is required').trim(),
 });
 
+// 5. Schema for syncing missed messages
+export const syncMessagesSchema = z.object({
+  workspaceId: objectIdSchema,
+  channel: z.string().min(1, 'Channel name is required').trim().toLowerCase(),
+  lastMessageCreatedAt: z.string().refine((val) => !isNaN(Date.parse(val)), {
+    message: 'Invalid ISO date string',
+  }),
+});
+
 // Derive and export TypeScript interfaces from the Zod schemas
 export type JoinChannelPayload = z.infer<typeof joinChannelSchema>;
 export type SendMessagePayload = z.infer<typeof sendMessageSchema>;
 export type TypingIndicatorPayload = z.infer<typeof typingIndicatorSchema>;
 export type ToggleReactionPayload = z.infer<typeof toggleReactionSchema>;
+export type SyncMessagesPayload = z.infer<typeof syncMessagesSchema>;

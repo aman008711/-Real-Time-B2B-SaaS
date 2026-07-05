@@ -9,7 +9,7 @@ import { WorkspaceModel } from './models/workspace.model';
 import { MessageModel } from './models/message.model';
 import { redisClient, isRedisConnected } from './config/redis';
 import { inMemoryOnlineUsers } from './controllers/presence.controller';
-import { joinChannelSchema, sendMessageSchema, typingIndicatorSchema, toggleReactionSchema } from './types/socket.validators';
+import { joinChannelSchema, sendMessageSchema, typingIndicatorSchema, toggleReactionSchema, syncMessagesSchema } from './types/socket.validators';
 import {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -370,6 +370,70 @@ export function initSocketServer(httpServer: http.Server): SocketIOServer<
         console.log(`📡 [Socket Reaction] ${socket.data.username} toggled reaction ${emoji} on message ${messageId}`);
       } catch (err) {
         console.error('❌ [Socket Reaction] Unexpected error:', err);
+      }
+    });
+
+    // 6. Sync Missed Messages Event Handler
+    socket.on('sync_messages', async (payload) => {
+      try {
+        const parseResult = syncMessagesSchema.safeParse(payload);
+        if (!parseResult.success) {
+          console.warn('⚠️ [Socket Sync] Validation failed:', parseResult.error.errors[0].message);
+          return;
+        }
+
+        const { workspaceId, channel, lastMessageCreatedAt } = parseResult.data;
+        const userIdStr = socket.data.userId;
+
+        // Verify workspace membership
+        const workspace = await WorkspaceModel.findById(workspaceId).exec();
+        if (!workspace) return;
+        const isMember = workspace.members.some((memberId) => memberId.toString() === userIdStr);
+        if (!isMember) return;
+
+        // Fetch parent messages created after the last message timestamp
+        const missedMessages = await MessageModel.find({
+          workspaceId: new mongoose.Types.ObjectId(workspaceId),
+          channel,
+          createdAt: { $gt: new Date(lastMessageCreatedAt) },
+          $or: [
+            { parentMessageId: { $exists: false } },
+            { parentMessageId: null }
+          ]
+        })
+          .sort({ createdAt: 1 })
+          .populate('senderId', 'name role email')
+          .exec();
+
+        // Convert messages to response payloads
+        const messagesPayload = missedMessages.map((msg) => ({
+          id: msg._id.toString(),
+          workspaceId: msg.workspaceId.toString(),
+          channel: msg.channel,
+          text: msg.text,
+          senderId: msg.senderId ? (msg.senderId as any)._id.toString() : '',
+          parentMessageId: msg.parentMessageId ? msg.parentMessageId.toString() : undefined,
+          reactions: msg.reactions.map((r) => ({
+            emoji: r.emoji,
+            users: r.users.map((u) => u.toString())
+          })),
+          createdAt: msg.createdAt.toISOString(),
+          sender: {
+            id: msg.senderId ? (msg.senderId as any)._id.toString() : '',
+            username: msg.senderId ? (msg.senderId as any).name : 'Unknown',
+            email: msg.senderId ? (msg.senderId as any).email : '',
+            role: msg.senderId ? (msg.senderId as any).role : 'member',
+          }
+        }));
+
+        // Send back specifically to the requesting socket
+        socket.emit('missed_messages', {
+          channel,
+          messages: messagesPayload
+        });
+        console.log(`📡 [Socket Sync] Sent ${messagesPayload.length} missed messages to user ${socket.data.username} for #${channel}`);
+      } catch (err) {
+        console.error('❌ [Socket Sync] Unexpected error:', err);
       }
     });
 
