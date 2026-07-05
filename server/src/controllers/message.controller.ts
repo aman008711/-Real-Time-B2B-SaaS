@@ -113,14 +113,55 @@ export async function getMessages(req: AuthenticatedRequest, res: Response): Pro
     const messages = await MessageModel.find({
       workspaceId: new mongoose.Types.ObjectId(workspaceId),
       channel: channelLower,
+      $or: [
+        { parentMessageId: { $exists: false } },
+        { parentMessageId: null }
+      ]
     })
       .sort({ createdAt: 1 })
       .populate('senderId', 'name role email')
       .exec();
 
-    res.status(200).json(messages);
+    const messagesWithReplyCounts = await Promise.all(
+      messages.map(async (msg) => {
+        const replyCount = await MessageModel.countDocuments({ parentMessageId: msg._id });
+        return {
+          ...msg.toJSON(),
+          replyCount
+        };
+      })
+    );
+
+    res.status(200).json(messagesWithReplyCounts);
   } catch (error: any) {
     console.error('Get messages error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function getMessageReplies(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const { messageId } = req.params;
+    if (!messageId || !mongoose.Types.ObjectId.isValid(messageId)) {
+      res.status(400).json({ error: 'Invalid message identifier' });
+      return;
+    }
+
+    const replies = await MessageModel.find({
+      parentMessageId: new mongoose.Types.ObjectId(messageId)
+    })
+      .sort({ createdAt: 1 })
+      .populate('senderId', 'name role email')
+      .exec();
+
+    res.status(200).json(replies);
+  } catch (error: any) {
+    console.error('Get message replies error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

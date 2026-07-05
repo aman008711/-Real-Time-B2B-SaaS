@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { createWorkspace, getWorkspaces, addChannel, inviteMember } from '../controllers/workspace.controller';
-import { sendMessage, getMessages } from '../controllers/message.controller';
+import { sendMessage, getMessages, getMessageReplies } from '../controllers/message.controller';
 import { authenticateToken } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -16,5 +16,6 @@ router.post('/:workspaceId/members', inviteMember as any);
 
 router.post('/:workspaceId/messages', sendMessage as any);
 router.get('/:workspaceId/messages', getMessages as any);
+router.get('/messages/:messageId/replies', getMessageReplies as any);
 
 export default router;
