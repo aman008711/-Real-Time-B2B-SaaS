@@ -455,13 +455,11 @@ export default function Dashboard() {
 
   const handleDeleteMessage = (msgId: string) => {
     if (!socket || !isConnected || !activeWorkspace) return;
-    if (confirm('Are you sure you want to delete this message?')) {
-      socket.emit('delete_message', {
-        workspaceId: activeWorkspace.id,
-        channel: activeChannel,
-        messageId: msgId,
-      });
-    }
+    socket.emit('delete_message', {
+      workspaceId: activeWorkspace.id,
+      channel: activeChannel,
+      messageId: msgId,
+    });
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
