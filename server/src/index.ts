@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import http from 'http';
 import { env } from './config/env';
 import router from './routes';
@@ -9,6 +10,9 @@ import { initSocketServer } from './socket';
 
 const app = express();
 const PORT = env.PORT;
+
+// Enforce HTTP security headers
+app.use(helmet());
 
 // Enable CORS
 app.use(cors({
