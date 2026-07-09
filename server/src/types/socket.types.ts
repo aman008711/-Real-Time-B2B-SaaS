@@ -1,4 +1,4 @@
-import { JoinChannelPayload, SendMessagePayload, TypingIndicatorPayload, ToggleReactionPayload, SyncMessagesPayload } from './socket.validators';
+import { JoinChannelPayload, SendMessagePayload, TypingIndicatorPayload, ToggleReactionPayload, SyncMessagesPayload, DeleteMessagePayload } from './socket.validators';
 
 export interface MessagePayload {
   id: string;
@@ -25,6 +25,7 @@ export interface ClientToServerEvents {
   typing_stop: (payload: TypingIndicatorPayload) => void;
   toggle_reaction: (payload: ToggleReactionPayload) => void;
   sync_messages: (payload: SyncMessagesPayload) => void;
+  delete_message: (payload: DeleteMessagePayload) => void;
 }
 
 export interface ServerToClientEvents {
@@ -33,6 +34,7 @@ export interface ServerToClientEvents {
   user_presence: (payload: { userId: string; username: string; status: 'online' | 'offline' }) => void;
   reaction_updated: (payload: { messageId: string; reactions: { emoji: string; users: string[] }[] }) => void;
   missed_messages: (payload: { channel: string; messages: MessagePayload[] }) => void;
+  message_deleted: (payload: { messageId: string }) => void;
 }
 
 export interface InterServerEvents {

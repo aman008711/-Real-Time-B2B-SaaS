@@ -15,7 +15,8 @@ import {
   Send,
   Paperclip,
   MessageSquare,
-  X
+  X,
+  Trash2
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -362,14 +363,33 @@ export default function Dashboard() {
       }
     };
 
+    const handleMessageDeleted = (payload: { messageId: string }) => {
+      // 1. Remove from main channel messages feed
+      setMessages((prev) => prev.filter((m) => m.id !== payload.messageId));
+
+      // 2. If the active thread panel is open and matches this message, close it
+      setActiveThreadMessage((prev) => {
+        if (prev && prev.id === payload.messageId) {
+          toast.error('The parent message of this thread was deleted.');
+          return null;
+        }
+        return prev;
+      });
+
+      // 3. Remove from thread replies if it is a reply message
+      setThreadReplies((prev) => prev.filter((m) => m.id !== payload.messageId));
+    };
+
     socket.on('message_received', handleMessageReceived);
     socket.on('reaction_updated', handleReactionUpdated);
     socket.on('missed_messages', handleMissedMessages);
+    socket.on('message_deleted', handleMessageDeleted);
 
     return () => {
       socket.off('message_received', handleMessageReceived);
       socket.off('reaction_updated', handleReactionUpdated);
       socket.off('missed_messages', handleMissedMessages);
+      socket.off('message_deleted', handleMessageDeleted);
     };
   }, [socket, activeWorkspace, activeChannel, activeThreadMessage]);
 
@@ -431,6 +451,17 @@ export default function Dashboard() {
       messageId: msgId,
       emoji
     });
+  };
+
+  const handleDeleteMessage = (msgId: string) => {
+    if (!socket || !isConnected || !activeWorkspace) return;
+    if (confirm('Are you sure you want to delete this message?')) {
+      socket.emit('delete_message', {
+        workspaceId: activeWorkspace.id,
+        channel: activeChannel,
+        messageId: msgId,
+      });
+    }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -914,6 +945,19 @@ export default function Dashboard() {
                         >
                           <MessageSquare className="w-4 h-4" />
                         </button>
+                        {(user && (msg.senderId?.id === user.id || user.role === 'admin')) && (
+                          <>
+                            <div className="w-px h-4 bg-slate-200 mx-1" />
+                            <button
+                              onClick={() => handleDeleteMessage(msg.id)}
+                              title="Delete Message"
+                              className="p-1 hover:bg-red-50 rounded text-slate-400 hover:text-red-650 transition-colors cursor-pointer"
+                              type="button"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
 
@@ -1148,6 +1192,19 @@ export default function Dashboard() {
                             {emoji}
                           </button>
                         ))}
+                        {(user && (reply.senderId?.id === user.id || user.role === 'admin')) && (
+                          <>
+                            <div className="w-px h-3.5 bg-slate-200 mx-0.5" />
+                            <button
+                              onClick={() => handleDeleteMessage(reply.id)}
+                              title="Delete Comment"
+                              className="p-0.5 hover:bg-red-50 rounded text-slate-400 hover:text-red-650 transition-colors cursor-pointer"
+                              type="button"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
                       </div>
 
                       <div className="w-8 h-8 rounded-lg bg-linear-to-tr from-violet-600/70 to-indigo-650/70 flex items-center justify-center font-bold text-white shrink-0 text-xs shadow-xs">

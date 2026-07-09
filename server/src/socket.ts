@@ -9,7 +9,7 @@ import { WorkspaceModel } from './models/workspace.model';
 import { MessageModel } from './models/message.model';
 import { redisClient, isRedisConnected } from './config/redis';
 import { inMemoryOnlineUsers } from './controllers/presence.controller';
-import { joinChannelSchema, sendMessageSchema, typingIndicatorSchema, toggleReactionSchema, syncMessagesSchema } from './types/socket.validators';
+import { joinChannelSchema, sendMessageSchema, typingIndicatorSchema, toggleReactionSchema, syncMessagesSchema, deleteMessageSchema } from './types/socket.validators';
 import {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -434,6 +434,59 @@ export function initSocketServer(httpServer: http.Server): SocketIOServer<
         console.log(`📡 [Socket Sync] Sent ${messagesPayload.length} missed messages to user ${socket.data.username} for #${channel}`);
       } catch (err) {
         console.error('❌ [Socket Sync] Unexpected error:', err);
+      }
+    });
+
+    // 7. Delete Chat Message Event Handler
+    socket.on('delete_message', async (payload) => {
+      try {
+        const parseResult = deleteMessageSchema.safeParse(payload);
+        if (!parseResult.success) {
+          console.warn('⚠️ [Socket Delete] Validation failed:', parseResult.error.errors[0].message);
+          return;
+        }
+
+        const { workspaceId, channel, messageId } = parseResult.data;
+        const userIdStr = socket.data.userId;
+
+        // Fetch target message
+        const message = await MessageModel.findById(messageId).exec();
+        if (!message) {
+          console.warn(`⚠️ [Socket Delete] Message ${messageId} not found`);
+          return;
+        }
+
+        // Verify workspace membership
+        const workspace = await WorkspaceModel.findById(workspaceId).exec();
+        if (!workspace) return;
+        const isMember = workspace.members.some((memberId) => memberId.toString() === userIdStr);
+        if (!isMember) return;
+
+        // Verify authorization: must be the message sender OR an admin in the workspace
+        const isSender = message.senderId.toString() === userIdStr;
+        const isAdmin = socket.data.role === 'admin';
+
+        if (!isSender && !isAdmin) {
+          console.warn(`⚠️ [Socket Delete] Forbidden delete attempt by ${socket.data.username} for message ${messageId}`);
+          return;
+        }
+
+        // Delete the message
+        await MessageModel.deleteOne({ _id: messageId });
+
+        // If the message has no parentMessageId, it is a parent message. Cascade delete all its replies!
+        if (!message.parentMessageId) {
+          await MessageModel.deleteMany({ parentMessageId: messageId });
+          console.log(`📡 [Socket Delete] Cascade deleted replies for parent message ${messageId}`);
+        }
+
+        // Broadcast deletion event to the room
+        const roomName = `workspace:${workspaceId}:channel:${channel}`;
+        io.to(roomName).emit('message_deleted', { messageId: messageId.toString() });
+
+        console.log(`📡 [Socket Delete] Message ${messageId} deleted by ${socket.data.username}`);
+      } catch (err) {
+        console.error('❌ [Socket Delete] Unexpected error:', err);
       }
     });
 

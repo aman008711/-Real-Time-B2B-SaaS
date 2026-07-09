@@ -45,9 +45,17 @@ export const syncMessagesSchema = z.object({
   }),
 });
 
+// 6. Schema for deleting a message
+export const deleteMessageSchema = z.object({
+  workspaceId: objectIdSchema,
+  channel: z.string().min(1, 'Channel name is required').trim().toLowerCase(),
+  messageId: objectIdSchema,
+});
+
 // Derive and export TypeScript interfaces from the Zod schemas
 export type JoinChannelPayload = z.infer<typeof joinChannelSchema>;
 export type SendMessagePayload = z.infer<typeof sendMessageSchema>;
 export type TypingIndicatorPayload = z.infer<typeof typingIndicatorSchema>;
 export type ToggleReactionPayload = z.infer<typeof toggleReactionSchema>;
 export type SyncMessagesPayload = z.infer<typeof syncMessagesSchema>;
+export type DeleteMessagePayload = z.infer<typeof deleteMessageSchema>;
