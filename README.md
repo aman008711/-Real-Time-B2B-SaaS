@@ -2,46 +2,52 @@
 
 A highly scalable, real-time collaboration platform combining team communication (Slack-like) with document editing (Notion-like). 
 
-This repository uses a split monorepo architecture managed via **npm workspaces** for `/client` and `/server`.
+This repository utilizes a split monorepo architecture managed via **npm workspaces** for `/client` and `/server`.
 
 ---
 
 ## 🛠️ Architecture & Technology Stack
 
 ### Backend (`/server`)
-* **Core**: Node.js, Express.js, TypeScript
-* **Authentication**: JSON Web Tokens (JWT) for stateless sessions, `bcryptjs` for salted password hashing.
-* **Architecture**: Interface-driven UserRepository pattern (ready to swap mock data store with SQL/NoSQL databases in subsequent weeks).
+* **Core Runtime**: Node.js, Express.js, TypeScript
+* **Database**: MongoDB (Mongoose schemas, indexing, and validation)
+* **Real-time Sync**: Socket.IO v4 (rooms, events, connections)
+* **Caching & Scaling**: Redis (profile cache, pub/sub presence, fail-proof fallback in-memory adapters)
+* **Security**: `helmet` (HTTP header protection), `bcryptjs` (salted password hashing), `jsonwebtoken` (stateless JWT auth)
 
 ### Frontend (`/client`)
-* **Core**: React 19, Vite 8, TypeScript
-* **Styling**: Tailwind CSS v4 configured via the official `@tailwindcss/vite` compiler plugin.
-* **Typography**: Clean, premium Google Font `Outfit`.
-* **Routing**: `react-router-dom` with authentication-based route guards for page protection.
+* **Core SPA**: React 19, Vite 8 (Rolldown + Oxc compiler), TypeScript
+* **Styling**: Tailwind CSS v4 configured via `@tailwindcss/vite`
+* **Real-time Gateway**: Socket.IO Client v4
+* **Build Optimizations**: `vite-plugin-remove-console` (strips debug console statements during production compilation)
 
 ---
 
 ## 📁 Repository Structure
 
-```
-├── client/                 # React 19 + Vite Frontend application
+```text
+├── client/                     # React 19 + Vite Frontend application
 │   ├── src/
-│   │   ├── pages/          # Login, Register, and Dashboard UI pages
-│   │   ├── services/       # Native fetch client with auto JWT Authorization header inject
-│   │   ├── main.tsx        # React entrypoint
-│   │   └── index.css       # Tailwind CSS v4 imports & Outfit font styles
-│   └── package.json
+│   │   ├── pages/              # Login, Register, and Dashboard SPA interfaces
+│   │   ├── services/           # Native fetch api clients with auto JWT injection
+│   │   ├── types/              # TypeScript definitions for Sockets, Profiles, and Messages
+│   │   └── main.tsx            # React bootstrap entrypoint
+│   ├── Dockerfile              # Multi-stage production build container (Nginx based)
+│   └── nginx.conf              # SPA Client path rewriting fallback proxy
 │
-├── server/                 # Express + TypeScript Backend server
+├── server/                     # Express + TypeScript Backend server
 │   ├── src/
-│   │   ├── controllers/    # Request logic & Zod schema validation inputs
-│   │   ├── middleware/     # JWT authentication and Role-Based Access Control (RBAC) guards
-│   │   ├── models/         # User domain interfaces and mock in-memory database
-│   │   ├── routes/         # Endpoint paths definitions
-│   │   └── index.ts        # Server bootstrap script, CORS config & error boundaries
-│   └── package.json
+│   │   ├── config/             # DB, Redis, and ENV configuration binders
+│   │   ├── controllers/        # Request/Response orchestration & API logic
+│   │   ├── middleware/         # Auth filters, error boundaries, RBAC guards
+│   │   ├── models/             # Mongoose DB models (User, Workspace, Message)
+│   │   ├── routes/             # REST Endpoint paths
+│   │   ├── types/              # Socket events interface types & Zod schemas
+│   │   └── index.ts            # Server entry launcher
+│   └── Dockerfile              # Production runner container (non-root node user configuration)
 │
-├── package.json            # Monorepo workspaces settings
+├── docker-compose.yml          # Container orchestration (MongoDB, Redis, Server, Frontend)
+├── package.json                # Monorepo workspace configuration
 └── README.md
 ```
 
@@ -52,76 +58,237 @@ This repository uses a split monorepo architecture managed via **npm workspaces*
 ### 📋 Prerequisites
 * **Node.js**: `v18.x` or higher
 * **npm**: `v9.x` or higher
+* **Docker Desktop**: Recommended for container orchestration.
 
-### 📥 Installation
-To install dependencies for the entire project (both client and server) in one step, run from the repository root:
+### 📥 Local Installation
+To install dependencies for the entire monorepo in a single step, execute from the repository root:
 ```bash
 npm install
 ```
 
-### ⚙️ Environmental Configuration
-Create a `.env` file inside the `/server` directory to configure the environment:
+### ⚙️ Environment Configuration
+Create a `.env` file inside the `/server` directory:
 ```env
 PORT=5000
 JWT_SECRET=your_super_secret_jwt_signature_key
+MONGO_URI=mongodb://127.0.0.1:27017/slacknotion
+CLIENT_ORIGIN=http://localhost:5173
 ```
 
 ---
 
-## 🏃 Running the Applications
+## 🏃 Running Locally
 
-You can run applications individually or concurrently using workspace scripts.
+You can run applications individually or concurrently using workspace commands.
 
-### Root Workspace Commands (Recommended)
+### Monorepo Workspaces Scripts (Recommended)
 Run these commands from the repository root:
-* **Start Server Dev**: `npm run server:dev`
-* **Start Client Dev**: `npm run client:dev`
-
-### Individual Project Commands
-#### Backend Server
-```bash
-cd server
-npm run dev
-```
-Runs on `http://localhost:5000`. You can inspect the health check endpoint at `http://localhost:5000/health`.
-
-#### Frontend Client
-```bash
-cd client
-npm run dev
-```
-Runs on `http://localhost:5173`.
+* **Start Server Dev**: `npm run server:dev` (runs on `http://localhost:5000`)
+* **Start Client Dev**: `npm run client:dev` (runs on `http://localhost:5173`)
+* **Build Server**: `npm run server:build` (outputs to `/server/dist/`)
+* **Build Client**: `npm run client:build` (outputs to `/client/dist/`)
 
 ---
 
-## 🏗️ Production Builds
+## 🐳 Running with Docker Compose
 
-Verify compilation and prepare optimized builds using these commands:
-* **Build Server**: `npm run server:build` (Outputs compiled JS inside `server/dist/`)
-* **Build Client**: `npm run client:build` (Outputs static bundle inside `client/dist/`)
-* **Or Build All**: Run `npm run build` within each subdirectory respectively.
+A pre-configured `docker-compose.yml` orchestrates the entire stack (Frontend, Backend, MongoDB, and Redis) with database storage persistence.
+
+### Command to Launch:
+Execute this command from the repository root:
+```bash
+docker-compose up --build
+```
+
+### Container Services Configuration:
+* **Frontend (`frontend`)**: Serves compiled React assets via Nginx on port `5173`.
+* **Backend (`backend`)**: Serves Express API & Socket.IO server on port `5000`.
+* **MongoDB (`mongodb`)**: Stores workspaces, messages, threads, and user records. Persisted in `mongodb_data` volume.
+* **Redis (`redis`)**: Serves caching requests and presence synchronization. Persisted in `redis_data` volume.
 
 ---
 
-## 🧪 Flow Verification
+## 📡 WebSocket Protocols & Events Dictionary
 
-### Week 1 Flow Verification
-The system registration, session persistence, role permissions, and route guards were verified successfully:
-1. **Route Guard**: Direct access to `http://localhost:5173/` redirects to `/login` without a token.
-2. **Registration**: Supports creating accounts with automatic schema validation (via Zod) and role definition (Admin vs Member).
-3. **Login**: Authenticates users using hashed credentials, signs a JWT (valid for 7 days), and stores it in `localStorage`.
-4. **Dashboard Control**: Displays the sidebar workspace layout, rendering administrative panels (e.g. workspace settings, user management) exclusively for `admin` role members.
-5. **Logout**: Safely clears tokens and redirects the browser session to `/login`.
+Communication between clients and servers occurs over WebSockets via Socket.IO.
 
-### Week 2 Flow Verification
-Workspace navigation, channel selection, and messages rendering were successfully verified:
-1. **Workspace Management**: Users can dynamically create new workspaces and list all workspaces they belong to.
-2. **Channel-Based Messaging**: Message routing, persistence in MongoDB, and population of sender details are active for default channels (`#general`, `#engineering-sync`, `#design-assets`). Access is protected to ensure only workspace members can read/write messages.
-3. **User Profile Display**: Integrated clean serialization (using `.toJSON()`) in the auth controller to reliably display the authenticated user's name, role, and avatar initials in the sidebar footer.
-4. **Logout UX Styling**: Redesigned the logout button to utilize a warning-red interface (`bg-red-50 text-red-500 hover:bg-red-100/80`) for enhanced visual affordance.
+### Client-to-Server Events (Emitted by Client)
 
-### Week 3 Flow Verification (Real-Time & Caching Layer)
-Websocket messaging pipelines, online/offline presence tracking, typing indicators, and session caches were successfully verified:
-1. **Socket.IO Real-Time Messaging**: Implemented real-time message broadcasting and room isolation mapping client clicks instantly to room joins (`join_channel` / `leave_channel`). Configured fallback REST APIs and timeouts to mark message errors with a clickable retry utility.
-2. **Online Presence & Typing Indicators**: Added real-time user typing indicators (debounced to 3 seconds with disconnect cleanups) and multi-tab resilient online status indicators. Workspace members are displayed in a dedicated sidebar list with pulsing green online dots.
-3. **Redis Caching Layer**: Installed `ioredis` and implemented a resilient session caching decorator inside the repository `findById` method. Profile fetches are intercepted: hits are served from Redis and hydrated into Mongoose Documents (saving database queries), while cache misses write back to Redis (1-hour TTL). Bootup remains fully crash-proof if Redis is offline.
+#### 1. `join_channel`
+Joins a channel room for workspace messaging.
+* **Payload Schema**:
+  ```typescript
+  {
+    workspaceId: string; // ObjectId string representation
+    channel: string;      // Channel name, e.g. "general"
+  }
+  ```
+
+#### 2. `leave_channel`
+Leaves a channel room.
+* **Payload Schema**: Same as `join_channel`.
+
+#### 3. `send_message`
+Emits a new chat message or thread reply.
+* **Payload Schema**:
+  ```typescript
+  {
+    workspaceId: string;
+    channel: string;
+    text: string;
+    parentMessageId?: string; // Optional: If provided, marks message as thread reply
+  }
+  ```
+
+#### 4. `typing_start` / `typing_stop`
+Notifies that the user has started or stopped typing in a channel.
+* **Payload Schema**:
+  ```typescript
+  {
+    workspaceId: string;
+    channel: string;
+  }
+  ```
+
+#### 5. `toggle_reaction`
+Toggles an emoji reaction on a specific message.
+* **Payload Schema**:
+  ```typescript
+  {
+    workspaceId: string;
+    channel: string;
+    messageId: string;
+    emoji: string; // Unicode emoji character, e.g. "👍"
+  }
+  ```
+
+#### 6. `sync_messages`
+Requests messages created after a client disconnected to reconcile sync state.
+* **Payload Schema**:
+  ```typescript
+  {
+    workspaceId: string;
+    channel: string;
+    lastMessageCreatedAt: string; // ISO DateTime string
+  }
+  ```
+
+#### 7. `delete_message`
+Deletes a message or reply. Enforces permissions (requires sender ownership or admin roles).
+* **Payload Schema**:
+  ```typescript
+  {
+    workspaceId: string;
+    channel: string;
+    messageId: string;
+  }
+  ```
+
+---
+
+### Server-to-Client Events (Listened by Client)
+
+#### 1. `message_received`
+Broadcasts a new message or reply to members inside the channel room.
+* **Payload Schema**:
+  ```typescript
+  {
+    id: string;
+    workspaceId: string;
+    channel: string;
+    text: string;
+    senderId: string;
+    parentMessageId?: string;
+    reactions: { emoji: string; users: string[] }[];
+    createdAt: string; // ISO date string
+    sender: {
+      id: string;
+      username: string;
+      email: string;
+      role: string;
+    };
+  }
+  ```
+
+#### 2. `user_typing`
+Broadcasts typing notifications in the channel.
+* **Payload Schema**:
+  ```typescript
+  {
+    username: string;
+    channel: string;
+    isTyping: boolean;
+  }
+  ```
+
+#### 3. `user_presence`
+Broadcasts user online status changes.
+* **Payload Schema**:
+  ```typescript
+  {
+    userId: string;
+    username: string;
+    status: 'online' | 'offline';
+  }
+  ```
+
+#### 4. `reaction_updated`
+Broadcasts updated reactions list on a message.
+* **Payload Schema**:
+  ```typescript
+  {
+    messageId: string;
+    reactions: { emoji: string; users: string[] }[]; // List of users per emoji
+  }
+  ```
+
+#### 5. `missed_messages`
+Returns the list of messages client missed during offline disconnect.
+* **Payload Schema**:
+  ```typescript
+  {
+    channel: string;
+    messages: MessagePayload[]; // Array of message objects
+  }
+  ```
+
+#### 6. `message_deleted`
+Broadcasts message removal from feed.
+* **Payload Schema**:
+  ```typescript
+  {
+    messageId: string;
+  }
+  ```
+
+---
+
+## 🔒 Security & Build Optimizations
+
+1. **Helmet HTTP Headers Setup**: Express backend enforces HTTP headers security policies (`app.use(helmet())`) to protect against common web threats.
+2. **Production Bundle Log Stripping**: Production builds compiled with Vite 8 discard debug console calls (`console.log`, `console.info`, `console.debug`, `console.trace`) using `vite-plugin-remove-console`, leaving critical error tracking intact.
+
+---
+
+## 🛠️ Contribution & Push Guidelines
+
+Developers working on this repository should adhere to standard workflow rules:
+
+### Git Flow & Commit Rules:
+* Work on feature branches branched off `main`.
+* Use semantic prefix commit descriptions (e.g. `Feature: <description>`, `UI: <description>`, `Optimization: <description>`, `Testing: <description>`).
+
+### Pushing Code:
+Prior to submitting code changes, verify compiler safety locally:
+```bash
+# Verify client build
+npm run client:build
+
+# Verify server build
+npm run server:build
+
+# Add, commit, and push
+git add .
+git commit -m "Semantic prefix: Short descriptive title"
+git push origin main
+```
